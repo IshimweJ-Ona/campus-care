@@ -4,96 +4,165 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../auth/domain/entities/app_user.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/incident.dart';
 import '../providers/incident_providers.dart';
 import 'incident_details_screen.dart';
 
 class MyIncidentsScreen extends ConsumerWidget {
-  const MyIncidentsScreen({
-    super.key,
-    this.category,
-  });
+  const MyIncidentsScreen({super.key, this.category});
 
   final String? category;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _MyIncidentsBody(category: category);
+  }
+}
+
+class _MyIncidentsBody extends ConsumerStatefulWidget {
+  const _MyIncidentsBody({required this.category});
+
+  final String? category;
+
+  @override
+  ConsumerState<_MyIncidentsBody> createState() => _MyIncidentsScreenState();
+}
+
+class _MyIncidentsScreenState extends ConsumerState<_MyIncidentsBody> {
+  late Future<AppUser?> _userFuture;
+  String _statusFilter = 'all';
 
   static const Color primaryColor = Color(0xFF1769AA);
   static const Color darkColor = Color(0xFF172B4D);
   static const Color backgroundColor = Color(0xFFF7F9FC);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    _userFuture = ref.read(authControllerProvider.notifier).getCurrentUser();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final incidentsAsync = ref.watch(incidentsStreamProvider);
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/home'),
-        ),
-        title: Text(
-          category == null ? 'Campus Incidents' : category!,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: darkColor,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          _buildHeader(context),
-          Expanded(
-            child: incidentsAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(),
-              ),
-              error: (error, stack) => _buildError(error.toString()),
-              data: (incidents) {
-                // Students and staff can browse all campus incidents.
-                // The category filter only changes which incidents are shown.
-                final filteredIncidents = category == null
-                    ? incidents
-                    : incidents
-                        .where((incident) =>
-                            incident.category == category)
-                        .toList();
+    return FutureBuilder<AppUser?>(
+      future: _userFuture,
+      builder: (context, userSnapshot) {
+        final user = userSnapshot.data;
+        final isApprovedStaff =
+            user?.role == 'staff' && user?.accountStatus == 'active';
 
-                if (filteredIncidents.isEmpty) {
-                  return _buildEmptyState();
-                }
+        return Scaffold(
+          backgroundColor: backgroundColor,
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => context.go('/home'),
+            ),
+            title: Text(
+              widget.category == null ? 'Campus Incidents' : widget.category!,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.white,
+            foregroundColor: darkColor,
+            elevation: 0,
+          ),
+          body: Column(
+            children: [
+              _buildHeader(context),
+              if (isApprovedStaff) _buildStatusFilter(),
+              Expanded(
+                child: incidentsAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, stack) => _buildError(error.toString()),
+                  data: (incidents) {
+                    var filteredIncidents = widget.category == null
+                        ? incidents
+                        : incidents
+                              .where(
+                                (incident) =>
+                                    incident.category == widget.category,
+                              )
+                              .toList();
 
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    ref.invalidate(incidentsStreamProvider);
-                  },
-                  child: ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(18),
-                    itemCount: filteredIncidents.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(height: 14),
-                    itemBuilder: (context, index) {
-                      final incident = filteredIncidents[index];
+                    if (isApprovedStaff && _statusFilter != 'all') {
+                      filteredIncidents = filteredIncidents
+                          .where((incident) => incident.status == _statusFilter)
+                          .toList();
+                    }
 
-                      return _IncidentCard(
-                        incident: incident,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => IncidentDetailsScreen(
-                                incidentId: incident.id,
-                              ),
-                            ),
+                    if (filteredIncidents.isEmpty) {
+                      return _buildEmptyState();
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: () async {
+                        ref.invalidate(incidentsStreamProvider);
+                      },
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(18),
+                        itemCount: filteredIncidents.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemBuilder: (context, index) {
+                          final incident = filteredIncidents[index];
+
+                          return _IncidentCard(
+                            incident: incident,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => IncidentDetailsScreen(
+                                    incidentId: incident.id,
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
-                );
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusFilter() {
+    const filters = <String, String>{
+      'all': 'All',
+      'pending': 'Pending',
+      'reviewed': 'Reviewed',
+      'in_progress': 'In Progress',
+      'resolved': 'Resolved',
+    };
+
+    return SizedBox(
+      height: 58,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        children: filters.entries.map((entry) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(entry.value),
+              selected: _statusFilter == entry.key,
+              selectedColor: primaryColor.withValues(alpha: 0.14),
+              onSelected: (_) {
+                setState(() => _statusFilter = entry.key);
               },
             ),
-          ),
-        ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -107,9 +176,9 @@ class MyIncidentsScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            category == null
+            widget.category == null
                 ? 'Reports around campus'
-                : '$category Reports',
+                : '${widget.category} Reports',
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -118,17 +187,17 @@ class MyIncidentsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            category == null
+            widget.category == null
                 ? 'Explore reported issues, check their progress, '
-                    'and join the conversation.'
-                : 'Explore all reported $category issues around campus.',
+                      'and join the conversation.'
+                : 'Explore all reported ${widget.category} issues around campus.',
             style: const TextStyle(
               color: Colors.black54,
               fontSize: 13,
               height: 1.5,
             ),
           ),
-          if (category != null) ...[
+          if (widget.category != null) ...[
             const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerLeft,
@@ -153,17 +222,13 @@ class MyIncidentsScreen extends ConsumerWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const SizedBox(height: 100),
-        const Icon(
-          Icons.inbox_outlined,
-          size: 65,
-          color: Colors.black26,
-        ),
+        const Icon(Icons.inbox_outlined, size: 65, color: Colors.black26),
         const SizedBox(height: 16),
         Center(
           child: Text(
-            category == null
+            widget.category == null
                 ? 'No incidents reported yet'
-                : 'No $category reports yet',
+                : 'No ${widget.category} reports yet',
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
@@ -174,7 +239,7 @@ class MyIncidentsScreen extends ConsumerWidget {
         const SizedBox(height: 8),
         Center(
           child: Text(
-            category == null
+            widget.category == null
                 ? 'New campus reports will appear here.'
                 : 'Reports in this category will appear here.',
             textAlign: TextAlign.center,
@@ -192,18 +257,11 @@ class MyIncidentsScreen extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 45,
-            ),
+            const Icon(Icons.error_outline, color: Colors.red, size: 45),
             const SizedBox(height: 12),
             const Text(
               'Unable to load incidents',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
@@ -219,10 +277,7 @@ class MyIncidentsScreen extends ConsumerWidget {
 }
 
 class _IncidentCard extends StatelessWidget {
-  const _IncidentCard({
-    required this.incident,
-    required this.onTap,
-  });
+  const _IncidentCard({required this.incident, required this.onTap});
 
   final Incident incident;
   final VoidCallback onTap;
@@ -238,13 +293,13 @@ class _IncidentCard extends StatelessWidget {
     // It does not read the private reporter identity collection.
     final Future<DocumentSnapshot<Map<String, dynamic>>>? myIncidentFuture =
         currentUserId == null
-            ? null
-            : FirebaseFirestore.instance
-                .collection('users')
-                .doc(currentUserId)
-                .collection('reported_incidents')
-                .doc(incident.id)
-                .get();
+        ? null
+        : FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUserId)
+              .collection('reported_incidents')
+              .doc(incident.id)
+              .get();
 
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       future: myIncidentFuture,
@@ -261,9 +316,7 @@ class _IncidentCard extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: const Color(0xFFE6EBF1),
-                ),
+                border: Border.all(color: const Color(0xFFE6EBF1)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -458,6 +511,10 @@ class _StatusBadge extends StatelessWidget {
     String label;
 
     switch (normalized) {
+      case 'reviewed':
+        color = Colors.blue;
+        label = 'Reviewed';
+        break;
       case 'in_progress':
         color = Colors.orange;
         label = 'In Progress';
@@ -472,10 +529,7 @@ class _StatusBadge extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 6,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),

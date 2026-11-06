@@ -5,6 +5,7 @@ import '../../data/datasources/incident_remote_datasource.dart';
 import '../../data/repositories/incident_repository_impl.dart';
 import '../../domain/entities/incident.dart';
 import '../../domain/entities/incident_comment.dart';
+import '../../domain/entities/incident_reporter.dart';
 import '../../domain/repositories/incident_repository.dart';
 
 // Firestore data source provider
@@ -33,6 +34,15 @@ final incidentDetailsProvider =
   final repository = ref.watch(incidentRepositoryProvider);
   return repository.getIncidentById(incidentId);
 });
+
+// Private reporter details; the data source verifies approved staff access.
+final incidentReporterProvider =
+    FutureProvider.family<IncidentReporter?, String>(
+  (ref, incidentId) {
+    final repository = ref.watch(incidentRepositoryProvider);
+    return repository.getIncidentReporter(incidentId);
+  },
+);
 
 // Real-time comments for a specific incident
 final incidentCommentsProvider =
