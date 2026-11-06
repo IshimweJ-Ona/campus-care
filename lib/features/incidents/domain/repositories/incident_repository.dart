@@ -1,5 +1,6 @@
 import '../entities/incident.dart';
 import '../entities/incident_comment.dart';
+import '../entities/incident_reporter.dart';
 
 abstract class IncidentRepository {
   // submit a new campus incident
@@ -18,6 +19,9 @@ abstract class IncidentRepository {
 
   // Retrieve one incident by its ID
   Future<Incident?> getIncidentById(String incidentId);
+
+  // Retrieve private reporter details for approved staff.
+  Future<IncidentReporter?> getIncidentReporter(String incidentId);
 
   //Add a comment to an existing incident.
   Future<void> addComment({
