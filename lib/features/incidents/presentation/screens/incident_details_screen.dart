@@ -1,17 +1,16 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_colors.dart';
+import '../../../auth/domain/entities/app_user.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/incident.dart';
 import '../../domain/entities/incident_comment.dart';
 import '../providers/incident_providers.dart';
 
 class IncidentDetailsScreen extends ConsumerStatefulWidget {
-  const IncidentDetailsScreen({
-    super.key,
-    required this.incidentId,
-  });
+  const IncidentDetailsScreen({super.key, required this.incidentId});
 
   final String incidentId;
 
@@ -20,15 +19,23 @@ class IncidentDetailsScreen extends ConsumerStatefulWidget {
       _IncidentDetailsScreenState();
 }
 
-class _IncidentDetailsScreenState
-    extends ConsumerState<IncidentDetailsScreen> {
+class _IncidentDetailsScreenState extends ConsumerState<IncidentDetailsScreen> {
   final _commentController = TextEditingController();
 
+  late Future<AppUser?> _userFuture;
   bool _isPosting = false;
+  bool _isUpdatingStatus = false;
+  String? _selectedStatus;
 
   static const Color primaryColor = Color(0xFF1769AA);
   static const Color darkColor = Color(0xFF172B4D);
   static const Color backgroundColor = Color(0xFFF7F9FC);
+
+  @override
+  void initState() {
+    super.initState();
+    _userFuture = ref.read(authControllerProvider.notifier).getCurrentUser();
+  }
 
   @override
   void dispose() {
@@ -41,9 +48,7 @@ class _IncidentDetailsScreenState
 
     if (message.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please write a comment first.'),
-        ),
+        const SnackBar(content: Text('Please write a comment first.')),
       );
       return;
     }
@@ -51,10 +56,9 @@ class _IncidentDetailsScreenState
     setState(() => _isPosting = true);
 
     try {
-      await ref.read(incidentRepositoryProvider).addComment(
-            incidentId: widget.incidentId,
-            message: message,
-          );
+      await ref
+          .read(incidentRepositoryProvider)
+          .addComment(incidentId: widget.incidentId, message: message);
 
       if (!mounted) return;
 
@@ -82,11 +86,53 @@ class _IncidentDetailsScreenState
     }
   }
 
+  Future<void> _updateStatus(Incident incident) async {
+    final status = _selectedStatus;
+    if (status == null || status == incident.status || _isUpdatingStatus) {
+      return;
+    }
+
+    setState(() => _isUpdatingStatus = true);
+
+    try {
+      await ref
+          .read(incidentRepositoryProvider)
+          .updateIncidentStatus(incidentId: incident.id, status: status);
+
+      if (!mounted) return;
+
+      setState(() => _selectedStatus = status);
+      ref.invalidate(incidentDetailsProvider(widget.incidentId));
+      ref.invalidate(incidentsStreamProvider);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Incident status updated successfully.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Unable to update incident status: $error'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingStatus = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final incidentAsync = ref.watch(
-      incidentDetailsProvider(widget.incidentId),
-    );
+    final incidentAsync = ref.watch(incidentDetailsProvider(widget.incidentId));
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -105,9 +151,7 @@ class _IncidentDetailsScreenState
         elevation: 0,
       ),
       body: incidentAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -121,30 +165,49 @@ class _IncidentDetailsScreenState
             );
           }
 
-          return Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildIncidentInformation(incident),
-                      const SizedBox(height: 28),
-                      _buildCommentsSection(),
-                    ],
+          return FutureBuilder<AppUser?>(
+            future: _userFuture,
+            builder: (context, userSnapshot) {
+              final user = userSnapshot.data;
+              final isApprovedStaff =
+                  user?.role == 'staff' && user?.accountStatus == 'active';
+
+              return Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildIncidentInformation(
+                            incident,
+                            isApprovedStaff: isApprovedStaff,
+                          ),
+                          if (isApprovedStaff) ...[
+                            const SizedBox(height: 18),
+                            _buildStatusManagement(incident),
+                          ],
+                          const SizedBox(height: 28),
+                          _buildCommentsSection(),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              _buildCommentInput(),
-            ],
+                  _buildCommentInput(),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
 
-  Widget _buildIncidentInformation(Incident incident) {
+  Widget _buildIncidentInformation(
+    Incident incident, {
+    required bool isApprovedStaff,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -171,8 +234,7 @@ class _IncidentDetailsScreenState
               _buildStatusBadge(incident.status),
             ],
           ),
-          if (incident.photoUrl != null &&
-              incident.photoUrl!.isNotEmpty) ...[
+          if (incident.photoUrl != null && incident.photoUrl!.isNotEmpty) ...[
             const SizedBox(height: 18),
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -226,9 +288,11 @@ class _IncidentDetailsScreenState
           const SizedBox(height: 16),
           _buildInformationRow(
             Icons.calendar_today_outlined,
-            'Date reported',
-            _formatDate(incident.createdAt),
+            'Date submitted',
+            _formatDateTime(incident.createdAt),
           ),
+          const SizedBox(height: 16),
+          _buildReporterInformation(isApprovedStaff),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 14),
@@ -254,11 +318,175 @@ class _IncidentDetailsScreenState
     );
   }
 
-  Widget _buildInformationRow(
-    IconData icon,
-    String title,
-    String value,
-  ) {
+  Widget _buildReporterInformation(bool isApprovedStaff) {
+    if (!isApprovedStaff) {
+      return _buildInformationRow(
+        Icons.person_outline,
+        'Reported by',
+        'Campus member',
+      );
+    }
+
+    final reporterAsync = ref.watch(
+      incidentReporterProvider(widget.incidentId),
+    );
+
+    return reporterAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      ),
+      error: (error, stackTrace) => _buildInformationRow(
+        Icons.person_outline,
+        'Reported by',
+        'Reporter details unavailable',
+      ),
+      data: (reporter) {
+        if (reporter == null) {
+          return _buildInformationRow(
+            Icons.person_outline,
+            'Reported by',
+            'Reporter details unavailable',
+          );
+        }
+
+        final name = reporter.name.trim().isEmpty
+            ? 'Campus member'
+            : reporter.name.trim();
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+              backgroundImage:
+                  reporter.photoUrl != null && reporter.photoUrl!.isNotEmpty
+                  ? NetworkImage(reporter.photoUrl!)
+                  : null,
+              child: reporter.photoUrl == null || reporter.photoUrl!.isEmpty
+                  ? const Icon(Icons.person_outline, color: AppColors.primary)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Reported by',
+                    style: TextStyle(color: Colors.black54, fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: darkColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (reporter.email.trim().isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      reporter.email.trim(),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusManagement(Incident incident) {
+    const statuses = <String, String>{
+      'pending': 'Pending',
+      'reviewed': 'Reviewed',
+      'in_progress': 'In Progress',
+      'resolved': 'Resolved',
+    };
+    final currentStatus = statuses.containsKey(incident.status)
+        ? incident.status
+        : 'pending';
+    final selectedStatus = _selectedStatus ?? currentStatus;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5EAF0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Update status',
+            style: TextStyle(
+              color: darkColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: selectedStatus,
+            decoration: const InputDecoration(
+              labelText: 'Incident status',
+              border: OutlineInputBorder(),
+            ),
+            items: statuses.entries
+                .map(
+                  (entry) => DropdownMenuItem<String>(
+                    value: entry.key,
+                    child: Text(entry.value),
+                  ),
+                )
+                .toList(),
+            onChanged: _isUpdatingStatus
+                ? null
+                : (status) {
+                    setState(() => _selectedStatus = status);
+                  },
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isUpdatingStatus || selectedStatus == incident.status
+                  ? null
+                  : () => _updateStatus(incident),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.buttonPrimary,
+                foregroundColor: AppColors.textOnPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: _isUpdatingStatus
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.textOnPrimary,
+                      ),
+                    )
+                  : const Text('Update Status'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInformationRow(IconData icon, String title, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -270,10 +498,7 @@ class _IncidentDetailsScreenState
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.black54,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.black54, fontSize: 12),
               ),
               const SizedBox(height: 4),
               Text(
@@ -298,6 +523,10 @@ class _IncidentDetailsScreenState
     final String label;
 
     switch (normalized) {
+      case 'reviewed':
+        color = Colors.blue;
+        label = 'Reviewed';
+        break;
       case 'in_progress':
         color = Colors.orange;
         label = 'In Progress';
@@ -312,10 +541,7 @@ class _IncidentDetailsScreenState
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 11,
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
@@ -350,10 +576,7 @@ class _IncidentDetailsScreenState
         const SizedBox(height: 5),
         const Text(
           'See what other students and campus staff are saying.',
-          style: TextStyle(
-            color: Colors.black54,
-            fontSize: 13,
-          ),
+          style: TextStyle(color: Colors.black54, fontSize: 13),
         ),
         const SizedBox(height: 16),
         commentsAsync.when(
@@ -372,9 +595,7 @@ class _IncidentDetailsScreenState
               return _buildEmptyComments();
             }
 
-            return Column(
-              children: comments.map(_buildCommentCard).toList(),
-            );
+            return Column(children: comments.map(_buildCommentCard).toList());
           },
         ),
       ],
@@ -382,11 +603,12 @@ class _IncidentDetailsScreenState
   }
 
   Widget _buildCommentCard(IncidentComment comment) {
-    final hasVisibleName = comment.authorName != null &&
-        comment.authorName!.trim().isNotEmpty;
+    final hasVisibleName =
+        comment.authorName != null && comment.authorName!.trim().isNotEmpty;
 
-    final displayName =
-        hasVisibleName ? comment.authorName!.trim() : 'Campus member';
+    final displayName = hasVisibleName
+        ? comment.authorName!.trim()
+        : 'Campus member';
 
     return Container(
       width: double.infinity,
@@ -463,26 +685,16 @@ class _IncidentDetailsScreenState
       ),
       child: const Column(
         children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 35,
-            color: Colors.black26,
-          ),
+          Icon(Icons.chat_bubble_outline, size: 35, color: Colors.black26),
           SizedBox(height: 10),
           Text(
             'No comments yet',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: darkColor,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w600, color: darkColor),
           ),
           SizedBox(height: 5),
           Text(
             'Be the first to share an update.',
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.black54, fontSize: 12),
           ),
         ],
       ),
@@ -494,9 +706,7 @@ class _IncidentDetailsScreenState
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade200),
-        ),
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
       ),
       child: SafeArea(
         top: false,
