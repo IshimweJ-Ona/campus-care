@@ -8,7 +8,6 @@ import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../incidents/domain/entities/incident.dart';
 import '../../../incidents/presentation/providers/incident_providers.dart';
 
-
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -23,19 +22,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
 
-    _userFuture = ref
-        .read(authControllerProvider.notifier)
-        .getCurrentUser();
+    _userFuture = ref.read(authControllerProvider.notifier).getCurrentUser();
   }
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -46,9 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
@@ -76,10 +68,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
         final isStaff = user.role == 'staff';
 
-        return _buildDashboard(
-          user: user,
-          isStaff: isStaff,
-        );
+        return _buildDashboard(user: user, isStaff: isStaff);
       },
     );
   }
@@ -116,14 +105,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildDashboard({
-    required AppUser user,
-    required bool isStaff,
-  }) {
-    final firstName = (user.displayName ?? 'there')
-        .trim()
-        .split(' ')
-        .first;
+  Widget _buildDashboard({required AppUser user, required bool isStaff}) {
+    final firstName = (user.displayName ?? 'there').trim().split(' ').first;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -196,18 +179,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               Text(
                 'Campus made safer, together',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
-                ),
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
             ],
           ),
         ),
         IconButton(
-          onPressed: () => _showMessage(
-            'Notifications will be available soon.',
-          ),
+          onPressed: () =>
+              _showMessage('Notifications will be available soon.'),
           icon: const Icon(
             Icons.notifications_none_rounded,
             color: AppColors.textPrimary,
@@ -222,10 +201,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: CircleAvatar(
               radius: 21,
               backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-              backgroundImage:
-                  photoUrl != null && photoUrl.isNotEmpty
-                      ? NetworkImage(photoUrl)
-                      : null,
+              backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                  ? NetworkImage(photoUrl)
+                  : null,
               child: photoUrl == null || photoUrl.isEmpty
                   ? const Icon(
                       Icons.person_outline_rounded,
@@ -257,18 +235,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           isStaff
               ? 'Help us keep the campus safe and comfortable.'
               : 'Help make our campus safer.',
-          style: const TextStyle(
-            fontSize: 15,
-            color: AppColors.textPrimary,
-          ),
+          style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 4),
         const Text(
           'Report issues and track their resolution.',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
       ],
     );
@@ -287,7 +259,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         fit: StackFit.expand,
         children: [
           Image.network(
-            'https://images.unsplash.com/photo-1562774053-701939374585'
+            'https://africahealthcollaborative.org/wp-content/uploads/2023/10/IMG_8926-1320x880.jpg'
             '?auto=format&fit=crop&w=1000&q=85',
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
@@ -346,9 +318,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   height: 45,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      context.go(
-                        isStaff ? '/incidents' : '/incidents/create',
-                      );
+                      context.go(isStaff ? '/incidents' : '/incidents/create');
                     },
                     icon: Icon(
                       isStaff
@@ -357,9 +327,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     label: Text(
                       isStaff ? 'View Campus Reports' : 'Report an Incident',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
@@ -386,65 +354,140 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeading('Incident Statistics'),
-        const SizedBox(height: 14),
-        incidentsAsync.when(
-          loading: () => const Center(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: CircularProgressIndicator(),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.10),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.05),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          error: (error, stackTrace) => _errorMessage(
-            'Unable to load incident statistics.',
-          ),
-          data: (incidents) {
-            final total = incidents.length;
-            final pending = incidents
-                .where((incident) => incident.status == 'pending')
-                .length;
-            final inProgress = incidents
-                .where((incident) => incident.status == 'in_progress')
-                .length;
-            final resolved = incidents
-                .where((incident) => incident.status == 'resolved')
-                .length;
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.bar_chart_rounded,
+                    color: AppColors.primary,
+                    size: 25,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      'Incident Statistics',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.circle,
+                          color: AppColors.success,
+                          size: 8,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Live',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              incidentsAsync.when(
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+                error: (error, stackTrace) =>
+                    _errorMessage('Unable to load incident statistics.'),
+                data: (incidents) {
+                  final total = incidents.length;
+                  final pending = incidents
+                      .where((incident) => incident.status == 'pending')
+                      .length;
+                  final inProgress = incidents
+                      .where((incident) => incident.status == 'in_progress')
+                      .length;
+                  final resolved = incidents
+                      .where((incident) => incident.status == 'resolved')
+                      .length;
 
-            return GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.65,
-              children: [
-                _StatisticCard(
-                  title: 'Total reports',
-                  value: '$total',
-                  icon: Icons.description_outlined,
-                  color: const Color(0xFF2563EB),
-                ),
-                _StatisticCard(
-                  title: 'Pending',
-                  value: '$pending',
-                  icon: Icons.schedule_rounded,
-                  color: const Color(0xFFD97706),
-                ),
-                _StatisticCard(
-                  title: 'In progress',
-                  value: '$inProgress',
-                  icon: Icons.autorenew_rounded,
-                  color: const Color(0xFF7C3AED),
-                ),
-                _StatisticCard(
-                  title: 'Resolved',
-                  value: '$resolved',
-                  icon: Icons.check_circle_outline_rounded,
-                  color: const Color(0xFF16A34A),
-                ),
-              ],
-            );
-          },
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final cardWidth = (constraints.maxWidth - 10) / 2;
+
+                      return GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: cardWidth / 76,
+                        children: [
+                          _StatisticCard(
+                            title: 'Total Incidents',
+                            value: '$total',
+                            icon: Icons.access_time_rounded,
+                            accentColor: AppColors.primary,
+                          ),
+                          _StatisticCard(
+                            title: 'Pending Review',
+                            value: '$pending',
+                            icon: Icons.hourglass_top_rounded,
+                            accentColor: AppColors.warning,
+                          ),
+                          _StatisticCard(
+                            title: 'In Progress',
+                            value: '$inProgress',
+                            icon: Icons.play_arrow_rounded,
+                            accentColor: AppColors.primaryDark,
+                          ),
+                          _StatisticCard(
+                            title: 'Resolved',
+                            value: '$resolved',
+                            icon: Icons.check_rounded,
+                            accentColor: AppColors.success,
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -512,7 +555,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         firestoreCategory: 'Other',
         icon: Icons.more_horiz_rounded,
         image:
-            'https://images.unsplash.com/photo-1562774053-701939374585'
+            'https://africahealthcollaborative.org/wp-content/uploads/2023/10/IMG_8926-1320x880.jpg'
             '?auto=format&fit=crop&w=500&q=80',
         color: const Color(0xFF64748B),
       ),
@@ -525,18 +568,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         const SizedBox(height: 6),
         const Text(
           'Select a category to see related campus reports.',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 14),
         GridView.builder(
           itemCount: categories.length,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate:
-              const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
@@ -570,9 +609,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: _sectionHeading('All Campus Incidents'),
-            ),
+            Expanded(child: _sectionHeading('All Campus Incidents')),
             TextButton(
               onPressed: () => context.go('/incidents'),
               child: const Text('View all'),
@@ -582,10 +619,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         const SizedBox(height: 6),
         const Text(
           'See what has been reported across campus.',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 14),
         incidentsAsync.when(
@@ -595,14 +629,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: CircularProgressIndicator(),
             ),
           ),
-          error: (error, stackTrace) => _errorMessage(
-            'Unable to load campus incidents.',
-          ),
+          error: (error, stackTrace) =>
+              _errorMessage('Unable to load campus incidents.'),
           data: (incidents) {
             final sortedIncidents = List<Incident>.from(incidents)
-              ..sort(
-                (a, b) => b.createdAt.compareTo(a.createdAt),
-              );
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
             return _buildIncidentList(sortedIncidents);
           },
@@ -615,24 +646,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (incidents.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(
-          vertical: 30,
-          horizontal: 20,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppColors.primary.withValues(alpha: 0.08),
-          ),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.08)),
         ),
         child: const Column(
           children: [
-            Icon(
-              Icons.assignment_outlined,
-              size: 45,
-              color: AppColors.primary,
-            ),
+            Icon(Icons.assignment_outlined, size: 45, color: AppColors.primary),
             SizedBox(height: 12),
             Text(
               'No reports to display yet',
@@ -645,10 +667,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SizedBox(height: 6),
             Text(
               'New incident reports will appear here.',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -681,10 +700,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       child: Text(
         message,
-        style: const TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 13,
-        ),
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
       ),
     );
   }
@@ -750,25 +766,36 @@ class _StatisticCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.icon,
-    required this.color,
+    required this.accentColor,
   });
 
   final String title;
   final String value;
   final IconData icon;
-  final Color color;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.10)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 28),
+          Container(
+            height: 48,
+            width: 48,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: accentColor, size: 25),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -777,16 +804,18 @@ class _StatisticCard extends StatelessWidget {
               children: [
                 Text(
                   value,
-                  style: TextStyle(
-                    fontSize: 23,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.bold,
-                    color: color,
                   ),
                 ),
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 11,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -818,10 +847,7 @@ class _CategoryData {
 
 // Category card.
 class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({
-    required this.category,
-    required this.onTap,
-  });
+  const _CategoryCard({required this.category, required this.onTap});
 
   final _CategoryData category;
   final VoidCallback onTap;
@@ -891,10 +917,7 @@ class _CategoryCard extends StatelessWidget {
 
 // Campus incident card.
 class _RecentIncidentCard extends StatelessWidget {
-  const _RecentIncidentCard({
-    required this.incident,
-    required this.onTap,
-  });
+  const _RecentIncidentCard({required this.incident, required this.onTap});
 
   final Incident incident;
   final VoidCallback onTap;
@@ -902,11 +925,13 @@ class _RecentIncidentCard extends StatelessWidget {
   Color get _statusColor {
     switch (incident.status) {
       case 'resolved':
-        return const Color(0xFF16A34A);
+        return AppColors.success;
       case 'in_progress':
-        return const Color(0xFF7C3AED);
+        return AppColors.primary;
+      case 'reviewed':
+        return AppColors.primaryDark;
       default:
-        return const Color(0xFFD97706);
+        return const Color.fromARGB(255, 247, 158, 4);
     }
   }
 
@@ -916,6 +941,8 @@ class _RecentIncidentCard extends StatelessWidget {
         return 'Resolved';
       case 'in_progress':
         return 'In Progress';
+      case 'reviewed':
+        return 'Reviewed';
       default:
         return 'Pending';
     }
