@@ -1,20 +1,66 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-class PendingStaffScreen extends StatelessWidget {
-  const PendingStaffScreen({
-    super.key,
-    this.onSignOut,
-  });
+import '../../../../core/constants/app_colors.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 
-  final VoidCallback? onSignOut;
+class PendingStaffScreen extends ConsumerStatefulWidget {
+  const PendingStaffScreen({super.key});
+
+  @override
+  ConsumerState<PendingStaffScreen> createState() =>
+      _PendingStaffScreenState();
+}
+
+class _PendingStaffScreenState extends ConsumerState<PendingStaffScreen> {
+  bool _isSigningOut = false;
+
+  void _showError(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  Future<void> _backToLogin() async {
+    if (_isSigningOut) return;
+
+    setState(() {
+      _isSigningOut = true;
+    });
+
+    try {
+      final authDataSource = ref.read(authRemoteDataSourceProvider);
+      if (authDataSource.currentUser != null) {
+        await ref.read(authControllerProvider.notifier).signOut();
+      }
+
+      if (!mounted) return;
+      context.go('/login');
+    } catch (error) {
+      _showError(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSigningOut = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surface,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -28,13 +74,13 @@ class PendingStaffScreen extends StatelessWidget {
                     height: 110,
                     width: 110,
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.10),
+                      color: AppColors.primary.withValues(alpha: 0.10),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.hourglass_top_rounded,
                       size: 55,
-                      color: colorScheme.primary,
+                      color: AppColors.primary,
                     ),
                   ),
 
@@ -64,7 +110,7 @@ class PendingStaffScreen extends StatelessWidget {
                     'administrator approval.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+                      color: AppColors.textSecondary,
                       height: 1.6,
                     ),
                   ),
@@ -75,17 +121,17 @@ class PendingStaffScreen extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.06),
+                      color: AppColors.primary.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: colorScheme.primary.withValues(alpha: 0.18),
+                        color: AppColors.primary.withValues(alpha: 0.18),
                       ),
                     ),
                     child: Column(
                       children: [
                         Icon(
                           Icons.info_outline_rounded,
-                          color: colorScheme.primary,
+                          color: AppColors.primary,
                           size: 28,
                         ),
                         const SizedBox(height: 10),
@@ -103,7 +149,7 @@ class PendingStaffScreen extends StatelessWidget {
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             height: 1.5,
-                            color: colorScheme.onSurfaceVariant,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -112,21 +158,34 @@ class PendingStaffScreen extends StatelessWidget {
 
                   const SizedBox(height: 32),
 
-                  if (onSignOut != null)
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: onSignOut,
-                        icon: const Icon(Icons.logout_rounded),
-                        label: const Text('Sign Out'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isSigningOut ? null : _backToLogin,
+                      icon: _isSigningOut
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.textOnPrimary,
+                              ),
+                            )
+                          : const Icon(Icons.login_rounded),
+                      label: const Text('Back to Login'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.buttonPrimary,
+                        foregroundColor: AppColors.textOnPrimary,
+                        disabledBackgroundColor: AppColors.buttonDisabled,
+                        disabledForegroundColor:
+                            AppColors.buttonDisabledText,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
