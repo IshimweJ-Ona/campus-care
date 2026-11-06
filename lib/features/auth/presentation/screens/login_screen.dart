@@ -95,9 +95,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     if (user.role == 'staff') {
-      _showMessage(
-        'Your staff account is active. The staff dashboard is coming soon.',
-      );
+      context.go('/home');
       return;
     }
 
