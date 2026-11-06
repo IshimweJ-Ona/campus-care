@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/validators.dart';
+import '../../domain/entities/app_user.dart';
 import '../providers/auth_providers.dart';
 import '../widgets/auth_form_field.dart';
 import '../widgets/google_sign_in_button.dart';
@@ -59,18 +60,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   // Navigate according to the saved Firestore role and status.
-  void _navigateAccordingToAccountStatus(dynamic user) {
+  void _navigateAccordingToAccountStatus(AppUser user) {
     if (!mounted) return;
+
+    if (user.role == 'pending_staff' &&
+        user.accountStatus == 'pending') {
+      context.go('/pending-staff');
+      return;
+    }
 
     if (user.role == 'student' &&
         user.accountStatus == 'active') {
       context.go('/home');
-      return;
-    }
-
-    if (user.role == 'pending_staff' &&
-        user.accountStatus == 'pending') {
-      context.go('/pending-approval');
       return;
     }
 
