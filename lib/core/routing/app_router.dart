@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,7 +8,6 @@ import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/incidents/presentation/screens/create_incident_screen.dart';
-import '../../features/incidents/presentation/screens/edit_incident_screen.dart';
 import '../../features/incidents/presentation/screens/incident_details_screen.dart';
 import '../../features/incidents/presentation/screens/my_incidents_screen.dart';
 import '../../features/staff/presentation/screens/pending_staff_screen.dart';
@@ -36,10 +34,7 @@ CustomTransitionPage<void> _buildPageWithTransition({
 
       return FadeTransition(
         opacity: fadeAnimation,
-        child: SlideTransition(
-          position: slideAnimation,
-          child: child,
-        ),
+        child: SlideTransition(position: slideAnimation, child: child),
       );
     },
   );
@@ -50,24 +45,18 @@ final GoRouter appRouter = GoRouter(
   routes: [
     GoRoute(
       path: '/splash',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        state: state,
-        child: const SplashScreen(),
-      ),
+      pageBuilder: (context, state) =>
+          _buildPageWithTransition(state: state, child: const SplashScreen()),
     ),
     GoRoute(
       path: '/register',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        state: state,
-        child: const RegisterScreen(),
-      ),
+      pageBuilder: (context, state) =>
+          _buildPageWithTransition(state: state, child: const RegisterScreen()),
     ),
     GoRoute(
       path: '/login',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        state: state,
-        child: const LoginScreen(),
-      ),
+      pageBuilder: (context, state) =>
+          _buildPageWithTransition(state: state, child: const LoginScreen()),
     ),
     GoRoute(
       path: '/pending-staff',
@@ -85,17 +74,13 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/home',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        state: state,
-        child: const HomeScreen(),
-      ),
+      pageBuilder: (context, state) =>
+          _buildPageWithTransition(state: state, child: const HomeScreen()),
     ),
     GoRoute(
       path: '/profile',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        state: state,
-        child: const ProfileScreen(),
-      ),
+      pageBuilder: (context, state) =>
+          _buildPageWithTransition(state: state, child: const ProfileScreen()),
     ),
     GoRoute(
       path: '/incidents',
@@ -119,7 +104,7 @@ final GoRouter appRouter = GoRouter(
       path: '/incidents/:incidentId/edit',
       pageBuilder: (context, state) => _buildPageWithTransition(
         state: state,
-        child: EditIncidentScreen(
+        child: IncidentDetailsScreen(
           incidentId: state.pathParameters['incidentId']!,
         ),
       ),
