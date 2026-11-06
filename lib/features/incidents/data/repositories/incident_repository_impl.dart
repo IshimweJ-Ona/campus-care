@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../domain/entities/incident.dart';
 import '../../domain/entities/incident_comment.dart';
+import '../../domain/entities/incident_reporter.dart';
 import '../../domain/repositories/incident_repository.dart';
 import '../datasources/incident_remote_datasource.dart';
 
@@ -34,6 +35,14 @@ class IncidentRepositoryImpl implements IncidentRepository {
       message: data['message'] as String? ?? '',
       createdAt: _parseDate(data['createdAt']),
       authorName: data['authorName'] as String?,
+    );
+  }
+
+  IncidentReporter _mapToReporter(Map<String, dynamic> data) {
+    return IncidentReporter(
+      name: data['reporterName'] as String? ?? '',
+      email: data['reporterEmail'] as String? ?? '',
+      photoUrl: data['reporterPhotoUrl'] as String?,
     );
   }
 
@@ -89,6 +98,18 @@ class IncidentRepositoryImpl implements IncidentRepository {
     }
 
     return _mapToIncident(result);
+  }
+
+  @override
+  Future<IncidentReporter?> getIncidentReporter(String incidentId) async {
+    final result =
+        await _remoteDataSource.getIncidentReporter(incidentId);
+
+    if (result == null) {
+      return null;
+    }
+
+    return _mapToReporter(result);
   }
 
   @override

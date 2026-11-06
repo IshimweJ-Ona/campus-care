@@ -52,6 +52,7 @@ class IncidentRemoteDataSource {
       'uid': user.uid,
       'name': data['name'] ?? data['displayName'] ?? 'CampusCare User',
       'email': data['email'] ?? user.email ?? '',
+      'photoUrl': data['photoUrl'],
       'role': data['role'],
       'accountStatus': data['accountStatus'],
     };
@@ -139,6 +140,7 @@ class IncidentRemoteDataSource {
       'reporterId': profile['uid'],
       'reporterName': profile['name'],
       'reporterEmail': profile['email'],
+      'reporterPhotoUrl': profile['photoUrl'],
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -191,6 +193,27 @@ class IncidentRemoteDataSource {
     }
 
     return _incidentFromDocument(document);
+  }
+
+  // Private reporter data is available only to approved staff.
+  Future<Map<String, dynamic>?> getIncidentReporter(
+    String incidentId,
+  ) async {
+    if (!await _isApprovedStaff()) {
+      throw Exception('Only approved staff can view reporter details.');
+    }
+
+    final document = await _reporters.doc(incidentId).get();
+    if (!document.exists) {
+      return null;
+    }
+
+    final data = document.data()!;
+    return {
+      'reporterName': data['reporterName'],
+      'reporterEmail': data['reporterEmail'],
+      'reporterPhotoUrl': data['reporterPhotoUrl'],
+    };
   }
 
   // Add a comment to an existing incident.
@@ -296,6 +319,7 @@ class IncidentRemoteDataSource {
   }) async {
     const allowedStatuses = [
       'pending',
+      'reviewed',
       'in_progress',
       'resolved',
     ];
