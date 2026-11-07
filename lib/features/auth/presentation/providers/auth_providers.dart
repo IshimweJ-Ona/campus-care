@@ -53,7 +53,7 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<AppUser> registerWithEmail({
+  Future<void> registerWithEmail({
     required String name,
     required String email,
     required String password,
@@ -104,6 +104,18 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
     } catch (error) {
       throw Exception(ErrorHandler.getMessage(error));
     }
+  }
+
+  Future<void> resendVerificationEmail() {
+    return _execute(
+      _repository.resendVerificationEmail,
+    );
+  }
+
+  Future<AppUser> completeEmailVerification() {
+    return _execute(
+      _repository.completeEmailVerification,
+    );
   }
 
   Future<void> signOut() {

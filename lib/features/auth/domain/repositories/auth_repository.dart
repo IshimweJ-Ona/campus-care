@@ -2,7 +2,7 @@
 import '../entities/app_user.dart';
 
 abstract class AuthRepository {
-  Future<AppUser> registerWithEmail({
+  Future<void> registerWithEmail({
     required String name,
     required String email,
     required String password,
@@ -21,6 +21,10 @@ abstract class AuthRepository {
   Future<AppUser> loginWithGoogle();
 
   Future<AppUser?> getCurrentUser();
+
+  Future<void> resendVerificationEmail();
+
+  Future<AppUser> completeEmailVerification();
 
   Future<void> signOut();
 

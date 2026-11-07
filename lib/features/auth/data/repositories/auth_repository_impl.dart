@@ -1,9 +1,8 @@
 
-import 'package:firebase_auth/firebase_auth.dart';
-
 import '../../domain/entities/app_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
+import '../../../../core/utils/validators.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl(AuthRemoteDataSource dataSource)
@@ -11,70 +10,65 @@ class AuthRepositoryImpl implements AuthRepository {
 
   final AuthRemoteDataSource _dataSource;
 
-  // Convert Firebase user and Firestore profile into AppUser.
-  AppUser _mapUser(
-    User user,
-    Map<String, dynamic> profile,
-  ) {
+  AppUser _mapUser(AuthenticatedUserSession session) {
+    final profile = session.profile;
+    final inferredRole = Validators.roleForAluEmail(session.email) ?? 'unknown';
+
     return AppUser(
-      id: user.uid,
-      email: user.email ?? '',
-      displayName: profile['name'] as String? ?? user.displayName,
-      photoUrl: profile['photoUrl'] as String? ?? user.photoURL,
-      emailVerified: user.emailVerified,
-      role: profile['role'] as String? ?? 'unknown',
-      accountStatus: profile['accountStatus'] as String? ?? 'pending',
+      id: session.user.uid,
+      email: session.email,
+      displayName: profile?['name'] as String? ?? session.user.displayName,
+      photoUrl: profile?['photoUrl'] as String? ?? session.user.photoURL,
+      emailVerified: session.emailVerified,
+      role: profile?['role'] as String? ?? inferredRole,
+      accountStatus:
+          profile?['accountStatus'] as String? ?? 'unverified',
     );
   }
 
-  // Retrieve the authenticated user's Firestore profile.
-  Future<AppUser> _getAuthenticatedUser(User? user) async {
-    if (user == null) {
+  Future<AppUser> _getAuthenticatedUser({
+    String? requiredNewAccountRole,
+  }) async {
+    final session = await _dataSource.loadAuthenticatedUser(
+      requiredNewAccountRole: requiredNewAccountRole,
+    );
+
+    if (session == null) {
       throw StateError('Firebase did not return a user.');
     }
 
-    final profile = await _dataSource.getCurrentUserProfile();
-
-    if (profile == null) {
-      throw StateError(
-        'Your CampusCare profile was not found. Please register first.',
-      );
-    }
-
-    return _mapUser(user, profile);
+    return _mapUser(session);
   }
 
   @override
-  Future<AppUser> registerWithEmail({
+  Future<void> registerWithEmail({
     required String name,
     required String email,
     required String password,
     required String selectedRole,
   }) async {
-    final credential = await _dataSource.registerWithEmail(
+    await _dataSource.registerWithEmail(
       name: name,
       email: email,
       password: password,
       selectedRole: selectedRole,
     );
-
-    return _getAuthenticatedUser(credential.user);
   }
 
   @override
   Future<AppUser?> signInWithGoogle({
     required String selectedRole,
   }) async {
-    final credential = await _dataSource.signInWithGoogle(
-      selectedRole: selectedRole,
-    );
+    final credential = await _dataSource.signInWithGoogle();
 
     if (credential?.user == null) {
       return null;
     }
 
     try {
-      return await _getAuthenticatedUser(credential!.user);
+      return await _getAuthenticatedUser(
+        requiredNewAccountRole: selectedRole,
+      );
     } catch (_) {
       await _dataSource.signOut();
       rethrow;
@@ -86,13 +80,13 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    final credential = await _dataSource.loginWithEmail(
+    await _dataSource.loginWithEmail(
       email: email,
       password: password,
     );
 
     try {
-      return await _getAuthenticatedUser(credential.user);
+      return await _getAuthenticatedUser();
     } catch (_) {
       await _dataSource.signOut();
       rethrow;
@@ -101,10 +95,10 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<AppUser> loginWithGoogle() async {
-    final credential = await _dataSource.loginWithGoogle();
+    await _dataSource.loginWithGoogle();
 
     try {
-      return await _getAuthenticatedUser(credential.user);
+      return await _getAuthenticatedUser();
     } catch (_) {
       await _dataSource.signOut();
       rethrow;
@@ -113,19 +107,28 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<AppUser?> getCurrentUser() async {
-    final user = _dataSource.currentUser;
+    final session = await _dataSource.loadAuthenticatedUser();
+    return session == null ? null : _mapUser(session);
+  }
 
-    if (user == null) {
-      return null;
+  @override
+  Future<void> resendVerificationEmail() {
+    return _dataSource.resendVerificationEmail();
+  }
+
+  @override
+  Future<AppUser> completeEmailVerification() async {
+    final session = await _dataSource.loadAuthenticatedUser();
+    if (session == null) {
+      throw StateError('Sign in before completing email verification.');
+    }
+    if (!session.emailVerified || session.profile == null) {
+      throw StateError(
+        'Your email is not verified yet. Open the link we sent you and try again.',
+      );
     }
 
-    final profile = await _dataSource.getCurrentUserProfile();
-
-    if (profile == null) {
-      return null;
-    }
-
-    return _mapUser(user, profile);
+    return _mapUser(session);
   }
 
   @override

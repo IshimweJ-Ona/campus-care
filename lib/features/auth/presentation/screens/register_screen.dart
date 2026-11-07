@@ -63,6 +63,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   void _navigateAccordingToAccountStatus(AppUser user) {
     if (!mounted) return;
 
+    if (!user.emailVerified) {
+      context.go('/verify-email');
+      return;
+    }
+
     if (user.role == 'pending_staff' &&
         user.accountStatus == 'pending') {
       context.go('/pending-staff');
@@ -71,6 +76,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     if (user.role == 'student' &&
         user.accountStatus == 'active') {
+      context.go('/home');
+      return;
+    }
+
+    if (user.role == 'staff' && user.accountStatus == 'active') {
       context.go('/home');
       return;
     }
@@ -93,19 +103,34 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     try {
-      final user = await ref
+      await ref
           .read(authControllerProvider.notifier)
           .registerWithEmail(
             name: _nameController.text.trim(),
-            email: _emailController.text.trim(),
+            email: Validators.normalizeEmail(_emailController.text),
             password: _passwordController.text,
             selectedRole: _selectedRole,
           );
 
       if (!mounted) return;
 
-      _navigateAccordingToAccountStatus(user);
+      context.go('/verify-email');
     } catch (error) {
+      final currentUser =
+          ref.read(authRemoteDataSourceProvider).currentUser;
+      if (currentUser != null &&
+          Validators.normalizeEmail(currentUser.email ?? '') ==
+              Validators.normalizeEmail(_emailController.text) &&
+          !currentUser.emailVerified) {
+        if (mounted) {
+          context.go('/verify-email');
+          _showMessage(
+            error.toString().replaceFirst('Exception: ', ''),
+          );
+        }
+        return;
+      }
+
       _showMessage(
         error.toString().replaceFirst('Exception: ', ''),
       );
@@ -306,7 +331,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     AuthFormField(
                       controller: _emailController,
                       label: 'Email address',
-                      validator: Validators.validateEmail,
+                      validator: (value) {
+                        final emailError =
+                            Validators.validateAluEmail(value);
+                        if (emailError != null) return emailError;
+                        if (Validators.roleForAluEmail(value) !=
+                            _selectedRole) {
+                          return _selectedRole == 'student'
+                              ? 'Use an @alustudent.com email for a student account.'
+                              : 'Use an @alustaff.com email for a staff account.';
+                        }
+                        return null;
+                      },
                       keyboardType: TextInputType.emailAddress,
                     ),
 

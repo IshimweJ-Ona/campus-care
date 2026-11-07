@@ -2,6 +2,46 @@
 class Validators {
   Validators._();
 
+  static final RegExp _emailPattern = RegExp(
+    r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+"
+    r"(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
+    r"@(alustudent\.com|alustaff\.com)$",
+  );
+
+  static String normalizeEmail(String email) => email.trim().toLowerCase();
+
+  static String? roleForAluEmail(String? value) {
+    if (value == null) return null;
+
+    final email = normalizeEmail(value);
+    if (!_emailPattern.hasMatch(email) || email.length > 254) {
+      return null;
+    }
+
+    return email.endsWith('@alustudent.com') ? 'student' : 'staff';
+  }
+
+  static String? validateAluEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email address is required.';
+    }
+
+    final email = normalizeEmail(value);
+    if (email.length > 254) {
+      return 'Email address is too long.';
+    }
+
+    if (!_emailPattern.hasMatch(email)) {
+      return 'Enter a valid @alustudent.com or @alustaff.com email address.';
+    }
+
+    if (email.split('@').first.length > 64) {
+      return 'Email address is too long.';
+    }
+
+    return null;
+  }
+
   // Full Name
   static String? validateName(String? value) {
     if (value == null || value.trim().isEmpty) {
@@ -27,27 +67,7 @@ class Validators {
 
   // Email
   static String? validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Email address is required.';
-    }
-
-    final email = value.trim();
-
-    if (email.length > 254) {
-      return 'Email address is too long.';
-    }
-
-    final emailRegex = RegExp(
-      r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9]"
-      r"(?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
-      r"(?:\.[a-zA-Z]{2,})+$",
-    );
-
-    if (!emailRegex.hasMatch(email)) {
-      return 'Enter a valid email address.';
-    }
-
-    return null;
+    return validateAluEmail(value);
   }
 
   // Password

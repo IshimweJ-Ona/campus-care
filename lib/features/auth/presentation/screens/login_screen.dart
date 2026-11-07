@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/validators.dart';
+import '../../domain/entities/app_user.dart';
 import '../providers/auth_providers.dart';
 import '../widgets/auth_form_field.dart';
 import '../widgets/google_sign_in_button.dart';
@@ -58,43 +59,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return null;
   }
 
-  Future<void> _handleSuccessfulLogin(dynamic user) async {
+  Future<void> _handleSuccessfulLogin(AppUser user) async {
     if (!mounted) return;
 
-    if (user.accountStatus == 'pending' ||
-        user.role == 'pending_staff') {
-      await ref
-          .read(authControllerProvider.notifier)
-          .signOut();
-
-      if (!mounted) return;
-
-      _showMessage(
-        'Your staff account is awaiting approval. '
-        'You will be able to access the staff portal once approved.',
-      );
+    if (!user.emailVerified) {
+      context.go('/verify-email');
       return;
     }
 
-    if (user.accountStatus != 'active') {
-      await ref
-          .read(authControllerProvider.notifier)
-          .signOut();
-
-      if (!mounted) return;
-
-      _showMessage(
-        'Your account is not currently active. Please contact support.',
-      );
+    if (user.role == 'pending_staff' &&
+        user.accountStatus == 'pending') {
+      context.go('/pending-staff');
       return;
     }
 
-    if (user.role == 'student') {
-      context.go('/home');
-      return;
-    }
-
-    if (user.role == 'staff') {
+    if ((user.role == 'student' || user.role == 'staff') &&
+        user.accountStatus == 'active') {
       context.go('/home');
       return;
     }
@@ -125,7 +105,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final user = await ref
           .read(authControllerProvider.notifier)
           .loginWithEmail(
-            email: _emailController.text.trim(),
+            email: Validators.normalizeEmail(_emailController.text),
             password: _passwordController.text,
           );
 

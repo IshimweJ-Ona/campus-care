@@ -45,6 +45,10 @@ class ErrorHandler {
       return error.message.toString();
     }
 
+    if (error is ArgumentError) {
+      return error.message?.toString() ?? 'The information entered is invalid.';
+    }
+
     return 'Something went wrong. Please try again.';
   }
 }

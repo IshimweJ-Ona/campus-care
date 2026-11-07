@@ -4,6 +4,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../../core/utils/validators.dart';
+
+class AuthenticatedUserSession {
+  const AuthenticatedUserSession({
+    required this.user,
+    required this.email,
+    required this.emailVerified,
+    required this.profile,
+  });
+
+  final User user;
+  final String email;
+  final bool emailVerified;
+  final Map<String, dynamic>? profile;
+}
+
 class AuthRemoteDataSource {
   AuthRemoteDataSource({
     FirebaseAuth? firebaseAuth,
@@ -31,29 +47,171 @@ class AuthRemoteDataSource {
     }
   }
 
-  Future<void> _createUserProfile({
-    required User user,
+  void _validateEmailAndRole({
+    required String email,
     required String selectedRole,
-    String? name,
-  }) async {
-    if (selectedRole != 'student' && selectedRole != 'staff') {
-      throw ArgumentError('Invalid account role.');
+  }) {
+    final validationError = Validators.validateAluEmail(email);
+    if (validationError != null) {
+      throw ArgumentError(validationError);
     }
 
-    final isStudent = selectedRole == 'student';
-
-    await _firestore.collection('users').doc(user.uid).set({
-      'name': name ?? user.displayName ?? '',
-      'email': user.email ?? '',
-      'photoUrl': user.photoURL,
-      'role': isStudent ? 'student' : 'pending_staff',
-      'accountStatus': isStudent ? 'active' : 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    if (Validators.roleForAluEmail(email) != selectedRole) {
+      throw ArgumentError(
+        'Use an ${selectedRole == 'student' ? '@alustudent.com' : '@alustaff.com'} '
+        'email address for the selected account role.',
+      );
+    }
   }
 
-  // Register using email and password.
-  Future<UserCredential> registerWithEmail({
+  Future<Map<String, dynamic>> _getOrCreateUserProfile({
+    required User user,
+    required String authenticatedEmail,
+    String? requiredNewAccountRole,
+  }) async {
+    final roleForEmail = Validators.roleForAluEmail(authenticatedEmail);
+    if (roleForEmail == null) {
+      throw StateError('This account does not use a supported ALU email.');
+    }
+
+    final userDocument = _firestore.collection('users').doc(user.uid);
+    final profile = await _firestore
+        .runTransaction<Map<String, dynamic>>((transaction) async {
+      final snapshot = await transaction.get(userDocument);
+      if (snapshot.exists) {
+        final data = snapshot.data();
+        if (data == null) {
+          throw StateError('Your CampusCare profile could not be read.');
+        }
+        return data;
+      }
+
+      if (requiredNewAccountRole != null &&
+          requiredNewAccountRole != roleForEmail) {
+        throw ArgumentError(
+          'Use an ${requiredNewAccountRole == 'student' ? '@alustudent.com' : '@alustaff.com'} '
+          'email address for the selected account role.',
+        );
+      }
+
+      final isStudent = roleForEmail == 'student';
+      final data = <String, dynamic>{
+        'name': user.displayName ?? '',
+        'email': authenticatedEmail,
+        'photoUrl': user.photoURL,
+        'role': isStudent ? 'student' : 'pending_staff',
+        'accountStatus': isStudent ? 'active' : 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      transaction.set(userDocument, data);
+      return data;
+    });
+
+    _validateUserProfile(
+      profile: profile,
+      email: authenticatedEmail,
+      roleForEmail: roleForEmail,
+    );
+
+    return profile;
+  }
+
+  void _validateUserProfile({
+    required Map<String, dynamic> profile,
+    required String email,
+    required String roleForEmail,
+  }) {
+    final role = profile['role'];
+    final accountStatus = profile['accountStatus'];
+    final isStudentProfile =
+        roleForEmail == 'student' &&
+        role == 'student' &&
+        accountStatus == 'active';
+    final isActiveStaffProfile =
+        roleForEmail == 'staff' &&
+        role == 'staff' &&
+        accountStatus == 'active';
+    final isPendingStaffProfile =
+        roleForEmail == 'staff' &&
+        role == 'pending_staff' &&
+        accountStatus == 'pending';
+
+    if (profile['email'] != email ||
+        (!isStudentProfile &&
+            !isActiveStaffProfile &&
+            !isPendingStaffProfile)) {
+      throw StateError(
+        'Your CampusCare profile does not match your verified ALU account. '
+        'Please contact support.',
+      );
+    }
+  }
+
+  Future<AuthenticatedUserSession?> loadAuthenticatedUser({
+    String? requiredNewAccountRole,
+  }) async {
+    _checkFirebase();
+
+    final initialUser = _auth.currentUser;
+    if (initialUser == null) return null;
+
+    await initialUser.reload();
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('Your Firebase session has expired. Please sign in again.');
+    }
+
+    final email = user.email;
+    final emailError = Validators.validateAluEmail(email);
+    if (emailError != null) {
+      throw StateError(emailError);
+    }
+
+    final tokenResult = await user.getIdTokenResult(true);
+    final claims = tokenResult.claims ?? const <String, dynamic>{};
+    final tokenEmail = claims['email'];
+    if (tokenEmail is! String || tokenEmail != email) {
+      throw StateError(
+        'Firebase could not confirm the email on your account. '
+        'Please sign in again.',
+      );
+    }
+
+    final emailVerified =
+        user.emailVerified && claims['email_verified'] == true;
+    if (!emailVerified) {
+      if (requiredNewAccountRole != null &&
+          Validators.roleForAluEmail(email) != requiredNewAccountRole) {
+        _validateEmailAndRole(
+          email: email!,
+          selectedRole: requiredNewAccountRole,
+        );
+      }
+
+      return AuthenticatedUserSession(
+        user: user,
+        email: tokenEmail,
+        emailVerified: false,
+        profile: null,
+      );
+    }
+
+    final profile = await _getOrCreateUserProfile(
+      user: user,
+      authenticatedEmail: tokenEmail,
+      requiredNewAccountRole: requiredNewAccountRole,
+    );
+
+    return AuthenticatedUserSession(
+      user: user,
+      email: tokenEmail,
+      emailVerified: true,
+      profile: profile,
+    );
+  }
+
+  Future<void> registerWithEmail({
     required String name,
     required String email,
     required String password,
@@ -61,8 +219,14 @@ class AuthRemoteDataSource {
   }) async {
     _checkFirebase();
 
+    final normalizedEmail = Validators.normalizeEmail(email);
+    _validateEmailAndRole(
+      email: normalizedEmail,
+      selectedRole: selectedRole,
+    );
+
     final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
+      email: normalizedEmail,
       password: password,
     );
 
@@ -72,26 +236,12 @@ class AuthRemoteDataSource {
       throw StateError('Firebase did not create the user.');
     }
 
-    try {
-      await user.updateDisplayName(name.trim());
-
-      await _createUserProfile(
-        user: user,
-        selectedRole: selectedRole,
-        name: name.trim(),
-      );
-
-      return credential;
-    } catch (_) {
-      await user.delete();
-      rethrow;
-    }
+    await user.updateDisplayName(name.trim());
+    await user.sendEmailVerification();
   }
 
   // Register or sign in using Google.
-  Future<UserCredential?> signInWithGoogle({
-    required String selectedRole,
-  }) async {
+  Future<UserCredential?> signInWithGoogle() async {
     _checkFirebase();
 
     await _initializeGoogleSignIn();
@@ -107,24 +257,6 @@ class AuthRemoteDataSource {
       oauthCredential,
     );
 
-    final user = credential.user;
-
-    if (user == null) {
-      return null;
-    }
-
-    final userDocument = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (!userDocument.exists) {
-      await _createUserProfile(
-        user: user,
-        selectedRole: selectedRole,
-      );
-    }
-
     return credential;
   }
 
@@ -135,8 +267,14 @@ class AuthRemoteDataSource {
   }) async {
     _checkFirebase();
 
+    final normalizedEmail = Validators.normalizeEmail(email);
+    final emailError = Validators.validateAluEmail(normalizedEmail);
+    if (emailError != null) {
+      throw ArgumentError(emailError);
+    }
+
     return _auth.signInWithEmailAndPassword(
-      email: email.trim(),
+      email: normalizedEmail,
       password: password,
     );
   }
@@ -157,26 +295,18 @@ class AuthRemoteDataSource {
     return _auth.signInWithCredential(oauthCredential);
   }
 
-  // Retrieve the authenticated user's Firestore profile.
-  Future<Map<String, dynamic>?> getCurrentUserProfile() async {
+  Future<void> resendVerificationEmail() async {
     _checkFirebase();
 
-    final user = _auth.currentUser;
-
-    if (user == null) {
-      return null;
+    final session = await loadAuthenticatedUser();
+    if (session == null) {
+      throw StateError('Sign in before requesting a verification email.');
+    }
+    if (session.emailVerified) {
+      throw StateError('Your email address is already verified.');
     }
 
-    final document = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (!document.exists) {
-      return null;
-    }
-
-    return document.data();
+    await session.user.sendEmailVerification();
   }
 
   // Update the user's full name.
