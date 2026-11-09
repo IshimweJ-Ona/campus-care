@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as path;
+import '../../core/utils/image_file_validation.dart';
 
 // Identifies the type of image being uploaded.
 enum CloudinaryImageType {
@@ -15,19 +15,10 @@ enum CloudinaryImageType {
 class CloudinaryService {
   static const String _cloudName = 'vbzq5ssu';
 
-  static const int _maxFileSize = 2 * 1024 * 1024; // 2 MB
-
   static const Map<CloudinaryImageType, String> _uploadPresets = {
     CloudinaryImageType.incident: 'campuscare_incidents',
     CloudinaryImageType.profile: 'campuscare_profiles',
   };
-
-  static const List<String> _allowedExtensions = [
-    '.jpg',
-    '.jpeg',
-    '.png',
-    '.webp',
-  ];
 
   static const Duration _uploadTimeout = Duration(seconds: 90);
 
@@ -42,27 +33,13 @@ class CloudinaryService {
       throw Exception('The selected image does not exist.');
     }
 
-    // Validate image format.
-    final extension = path.extension(imageFile.path).toLowerCase();
-
-    if (!_allowedExtensions.contains(extension)) {
-      throw Exception(
-        'Unsupported image format. Please select JPG, JPEG, PNG or WEBP.',
-      );
-    }
-
-    // Validate image size before uploading.
     final fileSize = await imageFile.length();
-
-    if (fileSize == 0) {
-      throw Exception('The selected image is empty.');
-    }
-
-    if (fileSize > _maxFileSize) {
-      throw Exception(
-        'Image size must not exceed 2 MB. '
-        'Please choose a smaller image.',
-      );
+    final validationError = ImageFileValidation.validate(
+      filePath: imageFile.path,
+      fileSize: fileSize,
+    );
+    if (validationError != null) {
+      throw FormatException(validationError);
     }
 
     try {

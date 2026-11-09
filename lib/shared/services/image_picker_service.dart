@@ -3,17 +3,10 @@ import 'dart:io';
 
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/utils/image_file_validation.dart';
+
 class ImagePickerService {
   final ImagePicker _picker = ImagePicker();
-
-  static const int _maxFileSize = 2 * 1024 * 1024;
-
-  static const List<String> _allowedExtensions = [
-    '.jpg',
-    '.jpeg',
-    '.png',
-    '.webp',
-  ];
 
   /// Select an image from the device gallery.
   Future<File?> pickFromGallery() async {
@@ -44,26 +37,13 @@ class ImagePickerService {
       throw Exception('The selected image could not be found.');
     }
 
-    final extension =
-        pickedFile.path.split('.').last.toLowerCase();
-
-    if (!_allowedExtensions.contains('.$extension')) {
-      throw Exception(
-        'Please select a JPG, JPEG, PNG or WEBP image.',
-      );
-    }
-
     final fileSize = await file.length();
-
-    if (fileSize == 0) {
-      throw Exception('The selected image is empty.');
-    }
-
-    if (fileSize > _maxFileSize) {
-      throw Exception(
-        'Image size must not exceed 2 MB. '
-        'Please select a smaller image.',
-      );
+    final validationError = ImageFileValidation.validate(
+      filePath: pickedFile.path,
+      fileSize: fileSize,
+    );
+    if (validationError != null) {
+      throw FormatException(validationError);
     }
 
     return file;
