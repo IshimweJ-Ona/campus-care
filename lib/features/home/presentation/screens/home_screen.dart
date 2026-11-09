@@ -53,20 +53,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
         final user = snapshot.data!;
 
-        if (user.accountStatus != 'active') {
+        if (!user.canAccessIncidents) {
           return _buildAccessMessage(
             'Your account is not currently active. '
             'Please contact an administrator.',
           );
         }
 
-        if (user.role != 'student' && user.role != 'staff') {
-          return _buildAccessMessage(
-            'You do not have permission to access this page.',
-          );
-        }
-
-        final isStaff = user.role == 'staff';
+        final isStaff = user.canUseStaffFeatures;
 
         return _buildDashboard(user: user, isStaff: isStaff);
       },
@@ -248,101 +242,109 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // Reporting banner.
   Widget _buildReportBanner(bool isStaff) {
-    return Container(
-      height: 190,
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.network(
-            'https://africahealthcollaborative.org/wp-content/uploads/2023/10/IMG_8926-1320x880.jpg'
-            '?auto=format&fit=crop&w=1000&q=85',
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: AppColors.primary,
-                child: const Icon(
-                  Icons.school_rounded,
-                  color: Colors.white24,
-                  size: 100,
+    return LayoutBuilder(
+      builder: (context, constraints) => Container(
+        height: constraints.maxWidth < 300
+            ? 240
+            : constraints.maxWidth < 400
+            ? 210
+            : 190,
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              'https://africahealthcollaborative.org/wp-content/uploads/2023/10/IMG_8926-1320x880.jpg'
+              '?auto=format&fit=crop&w=1000&q=85',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: AppColors.primary,
+                  child: const Icon(
+                    Icons.school_rounded,
+                    color: Colors.white24,
+                    size: 100,
+                  ),
+                );
+              },
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.98),
+                    AppColors.primary.withValues(alpha: 0.78),
+                    Colors.transparent,
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
                 ),
-              );
-            },
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary.withValues(alpha: 0.98),
-                  AppColors.primary.withValues(alpha: 0.78),
-                  Colors.transparent,
-                ],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isStaff
-                      ? 'Campus needs\nyour attention.'
-                      : 'See something\nbroken?',
-                  style: const TextStyle(
-                    fontSize: 23,
-                    height: 1.2,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isStaff
-                      ? 'Review reported issues and\nhelp resolve them.'
-                      : 'Report it and help improve\nour campus.',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
-                ),
-                const Spacer(),
-                SizedBox(
-                  height: 45,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      context.go(isStaff ? '/incidents' : '/incidents/create');
-                    },
-                    icon: Icon(
-                      isStaff
-                          ? Icons.visibility_rounded
-                          : Icons.add_circle_rounded,
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isStaff
+                        ? 'Campus needs\nyour attention.'
+                        : 'See something\nbroken?',
+                    style: const TextStyle(
+                      fontSize: 23,
+                      height: 1.2,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                    label: Text(
-                      isStaff ? 'View Campus Reports' : 'Report an Incident',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isStaff
+                        ? 'Review reported issues and\nhelp resolve them.'
+                        : 'Report it and help improve\nour campus.',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      height: 1.4,
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primary,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    height: 45,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        context.go(
+                          isStaff ? '/incidents' : '/incidents/create',
+                        );
+                      },
+                      icon: Icon(
+                        isStaff
+                            ? Icons.visibility_rounded
+                            : Icons.add_circle_rounded,
+                      ),
+                      label: Text(
+                        isStaff ? 'View Campus Reports' : 'Report an Incident',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.primary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
