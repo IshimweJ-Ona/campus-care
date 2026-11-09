@@ -1,7 +1,6 @@
 
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -36,7 +35,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isBusy = false;
 
   bool get _supportsPassword {
-    final firebaseUser = FirebaseAuth.instance.currentUser;
+    final firebaseUser = ref.read(firebaseAuthProvider).currentUser;
 
     return firebaseUser?.providerData.any(
           (provider) => provider.providerId == 'password',
