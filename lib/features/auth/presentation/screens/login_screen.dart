@@ -203,7 +203,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     AuthFormField(
                       controller: _emailController,
                       label: 'Email address',
-                      validator: Validators.validateEmail,
+                      validator: Validators.validateLoginEmail,
                       keyboardType: TextInputType.emailAddress,
                     ),
 

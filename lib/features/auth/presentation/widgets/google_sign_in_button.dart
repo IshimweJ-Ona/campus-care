@@ -32,10 +32,11 @@ class GoogleSignInButton extends StatelessWidget {
               color: AppColors.primary,
             ),
           const SizedBox(width: 10),
-          Text(
-            isLoading
-              ? 'Connecting...'
-              : 'Continue with Google',
+          Flexible(
+            child: Text(
+              isLoading ? 'Connecting...' : 'Continue with Google',
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),

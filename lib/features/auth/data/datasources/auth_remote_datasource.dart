@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../../core/utils/development_test_account.dart';
+import '../../../../core/utils/auth_email_verification.dart';
 import '../../../../core/utils/validators.dart';
 
 class AuthenticatedUserSession {
@@ -69,7 +71,11 @@ class AuthRemoteDataSource {
     required String authenticatedEmail,
     String? requiredNewAccountRole,
   }) async {
-    final roleForEmail = Validators.roleForAluEmail(authenticatedEmail);
+    final isDevelopmentTestAccount =
+        isDevelopmentStaffTestEmail(authenticatedEmail);
+    final roleForEmail =
+        Validators.roleForAluEmail(authenticatedEmail) ??
+        (isDevelopmentTestAccount ? 'staff' : null);
     if (roleForEmail == null) {
       throw StateError('This account does not use a supported ALU email.');
     }
@@ -84,6 +90,13 @@ class AuthRemoteDataSource {
           throw StateError('Your CampusCare profile could not be read.');
         }
         return data;
+      }
+
+      if (isDevelopmentTestAccount) {
+        throw StateError(
+          'The Staff Test profile is missing. Run the development emulator '
+          'setup script before signing in.',
+        );
       }
 
       if (requiredNewAccountRole != null &&
@@ -142,7 +155,7 @@ class AuthRemoteDataSource {
             !isActiveStaffProfile &&
             !isPendingStaffProfile)) {
       throw StateError(
-        'Your CampusCare profile does not match your verified ALU account. '
+        'Your CampusCare profile does not match your verified account. '
         'Please contact support.',
       );
     }
@@ -164,7 +177,7 @@ class AuthRemoteDataSource {
 
     final email = user.email;
     final emailError = Validators.validateAluEmail(email);
-    if (emailError != null) {
+    if (emailError != null && !isDevelopmentStaffTestEmail(email)) {
       throw StateError(emailError);
     }
 
@@ -178,8 +191,12 @@ class AuthRemoteDataSource {
       );
     }
 
-    final emailVerified =
-        user.emailVerified && claims['email_verified'] == true;
+    final emailVerified = AuthEmailVerification.isVerified(
+      authUserVerified: user.emailVerified,
+      tokenVerified: claims['email_verified'] == true,
+      authenticatedEmail: email,
+      tokenEmail: tokenEmail,
+    );
     if (!emailVerified) {
       if (requiredNewAccountRole != null &&
           Validators.roleForAluEmail(email) != requiredNewAccountRole) {
@@ -268,7 +285,7 @@ class AuthRemoteDataSource {
     _checkFirebase();
 
     final normalizedEmail = Validators.normalizeEmail(email);
-    final emailError = Validators.validateAluEmail(normalizedEmail);
+    final emailError = Validators.validateLoginEmail(normalizedEmail);
     if (emailError != null) {
       throw ArgumentError(emailError);
     }

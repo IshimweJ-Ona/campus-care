@@ -18,6 +18,16 @@ class AppUser {
   final String role;
   final String accountStatus;
 
+  bool get isActiveStudent =>
+      emailVerified && role == 'student' && accountStatus == 'active';
+
+  bool get isApprovedStaff =>
+      emailVerified && role == 'staff' && accountStatus == 'active';
+
+  bool get canAccessIncidents => isActiveStudent || isApprovedStaff;
+
+  bool get canUseStaffFeatures => isApprovedStaff;
+
   AppUser copyWith({
     String? email,
     String? displayName,
