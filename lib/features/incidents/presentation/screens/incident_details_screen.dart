@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/incident_validation.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/incident.dart';
@@ -46,9 +47,10 @@ class _IncidentDetailsScreenState extends ConsumerState<IncidentDetailsScreen> {
   Future<void> _postComment() async {
     final message = _commentController.text.trim();
 
-    if (message.isEmpty) {
+    final commentError = IncidentValidation.validateComment(message);
+    if (commentError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please write a comment first.')),
+        SnackBar(content: Text(commentError)),
       );
       return;
     }
@@ -88,7 +90,9 @@ class _IncidentDetailsScreenState extends ConsumerState<IncidentDetailsScreen> {
 
   Future<void> _updateStatus(Incident incident) async {
     final status = _selectedStatus;
-    if (status == null || status == incident.status || _isUpdatingStatus) {
+    if (status == null ||
+        !IncidentValidation.canTransitionStatus(incident.status, status) ||
+        _isUpdatingStatus) {
       return;
     }
 
@@ -169,8 +173,7 @@ class _IncidentDetailsScreenState extends ConsumerState<IncidentDetailsScreen> {
             future: _userFuture,
             builder: (context, userSnapshot) {
               final user = userSnapshot.data;
-              final isApprovedStaff =
-                  user?.role == 'staff' && user?.accountStatus == 'active';
+              final isApprovedStaff = user?.canUseStaffFeatures ?? false;
 
               return Column(
                 children: [

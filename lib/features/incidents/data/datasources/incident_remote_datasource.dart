@@ -2,6 +2,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../../core/utils/incident_validation.dart';
+import '../../../../core/utils/validators.dart';
+
 class IncidentRemoteDataSource {
   IncidentRemoteDataSource({
     FirebaseFirestore? firestore,
@@ -39,23 +42,74 @@ class IncidentRemoteDataSource {
   // Get the current user's Firestore profile.
   Future<Map<String, dynamic>> _getUserProfile() async {
     final user = _currentUser;
-
-    final document = await _users.doc(user.uid).get();
+    final userReference = _users.doc(user.uid);
+    var document = await userReference.get();
 
     if (!document.exists) {
       throw Exception('Your user profile could not be found.');
     }
 
-    final data = document.data()!;
+    var data = document.data();
+    if (data == null) {
+      throw StateError('Your user profile could not be read.');
+    }
+
+    if (!data.containsKey('photoUrl')) {
+      await userReference.update({'photoUrl': user.photoURL});
+      document = await userReference.get();
+      data = document.data();
+      if (data == null) {
+        throw StateError('Your user profile could not be read.');
+      }
+    }
+
+    final name = data['name'];
+    final email = data['email'];
+    final photoUrl = data['photoUrl'];
+    if (name is! String ||
+        email is! String ||
+        email != user.email ||
+        (photoUrl != null && photoUrl is! String)) {
+      throw StateError(
+        'Your CampusCare profile is incomplete or does not match your '
+        'authenticated account. Please contact support.',
+      );
+    }
 
     return {
       'uid': user.uid,
-      'name': data['name'] ?? data['displayName'] ?? 'CampusCare User',
-      'email': data['email'] ?? user.email ?? '',
-      'photoUrl': data['photoUrl'],
+      'name': name,
+      'email': email,
+      'photoUrl': photoUrl,
       'role': data['role'],
       'accountStatus': data['accountStatus'],
     };
+  }
+
+  Future<void> _ensureVerifiedAluEmail(User user) async {
+    await user.reload();
+    final refreshedUser = _auth.currentUser;
+    if (refreshedUser == null) {
+      throw StateError('Your session expired. Please sign in again.');
+    }
+
+    final email = refreshedUser.email;
+    if (Validators.validateAluEmail(email) != null) {
+      throw StateError(
+        'Only verified @alustudent.com and @alustaff.com accounts can '
+        'submit incidents.',
+      );
+    }
+
+    final token = await refreshedUser.getIdTokenResult(true);
+    final claims = token.claims ?? const <String, dynamic>{};
+    if (refreshedUser.emailVerified != true ||
+        claims['email_verified'] != true ||
+        claims['email'] != email) {
+      throw StateError(
+        'Verify your ALU email address before submitting an incident.',
+      );
+    }
   }
 
   // Check whether the current user is approved staff.
@@ -63,14 +117,6 @@ class IncidentRemoteDataSource {
     final profile = await _getUserProfile();
 
     return profile['role'] == 'staff' &&
-        profile['accountStatus'] == 'active';
-  }
-
-  // Check whether the current user is an active student.
-  Future<bool> _isActiveStudent() async {
-    final profile = await _getUserProfile();
-
-    return profile['role'] == 'student' &&
         profile['accountStatus'] == 'active';
   }
 
@@ -92,20 +138,32 @@ class IncidentRemoteDataSource {
   }
 
   // Create a new incident.
-  
-  // Create a new incident.
   Future<String> createIncident({
     required String category,
     required String location,
     required String description,
     String? photoUrl,
   }) async {
-    // Only active students can report incidents.
-    if (!await _isActiveStudent()) {
-      throw Exception('Only active students can report incidents.');
+    final categoryError = IncidentValidation.validateCategory(category);
+    final locationError = IncidentValidation.validateLocation(location);
+    final descriptionError = IncidentValidation.validateDescription(description);
+    if (categoryError != null ||
+        locationError != null ||
+        descriptionError != null) {
+      throw ArgumentError(
+        categoryError ?? locationError ?? descriptionError,
+      );
     }
 
+    final user = _currentUser;
+    await _ensureVerifiedAluEmail(user);
+
     final profile = await _getUserProfile();
+
+    if (profile['role'] != 'student' ||
+        profile['accountStatus'] != 'active') {
+      throw Exception('Only active students can report incidents.');
+    }
 
     // Generate a unique incident document reference.
     final incidentReference = _incidents.doc();
@@ -115,7 +173,7 @@ class IncidentRemoteDataSource {
 
     // Generate the student's private incident reference.
     final userIncidentRef = _users
-        .doc(_currentUser.uid)
+        .doc(user.uid)
         .collection('reported_incidents')
         .doc(incidentReference.id);
 
@@ -140,7 +198,6 @@ class IncidentRemoteDataSource {
       'reporterId': profile['uid'],
       'reporterName': profile['name'],
       'reporterEmail': profile['email'],
-      'reporterPhotoUrl': profile['photoUrl'],
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -317,15 +374,8 @@ class IncidentRemoteDataSource {
     required String incidentId,
     required String status,
   }) async {
-    const allowedStatuses = [
-      'pending',
-      'reviewed',
-      'in_progress',
-      'resolved',
-    ];
-
-    if (!allowedStatuses.contains(status)) {
-      throw Exception('Invalid incident status.');
+    if (IncidentValidation.validateStatus(status) != null) {
+      throw ArgumentError('Invalid incident status.');
     }
 
     if (!await _isApprovedStaff()) {

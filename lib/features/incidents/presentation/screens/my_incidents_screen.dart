@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -52,8 +50,7 @@ class _MyIncidentsScreenState extends ConsumerState<_MyIncidentsBody> {
       future: _userFuture,
       builder: (context, userSnapshot) {
         final user = userSnapshot.data;
-        final isApprovedStaff =
-            user?.role == 'staff' && user?.accountStatus == 'active';
+        final isApprovedStaff = user?.canUseStaffFeatures ?? false;
 
         return Scaffold(
           backgroundColor: backgroundColor,
@@ -111,7 +108,7 @@ class _MyIncidentsScreenState extends ConsumerState<_MyIncidentsBody> {
                         itemBuilder: (context, index) {
                           final incident = filteredIncidents[index];
 
-                          return _IncidentCard(
+                          return IncidentCard(
                             incident: incident,
                             onTap: () {
                               Navigator.of(context).push(
@@ -276,8 +273,8 @@ class _MyIncidentsScreenState extends ConsumerState<_MyIncidentsBody> {
   }
 }
 
-class _IncidentCard extends StatelessWidget {
-  const _IncidentCard({required this.incident, required this.onTap});
+class IncidentCard extends ConsumerWidget {
+  const IncidentCard({super.key, required this.incident, required this.onTap});
 
   final Incident incident;
   final VoidCallback onTap;
@@ -286,170 +283,155 @@ class _IncidentCard extends StatelessWidget {
   static const Color darkColor = Color(0xFF172B4D);
 
   @override
-  Widget build(BuildContext context) {
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-
-    // Only checks the signed-in user's own private incident reference.
-    // It does not read the private reporter identity collection.
-    final Future<DocumentSnapshot<Map<String, dynamic>>>? myIncidentFuture =
-        currentUserId == null
-        ? null
-        : FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUserId)
-              .collection('reported_incidents')
-              .doc(incident.id)
-              .get();
-
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: myIncidentFuture,
-      builder: (context, snapshot) {
-        final isMyIncident = snapshot.data?.exists == true;
-
-        return Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            onTap: onTap,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ownership = ref.watch(isMyIncidentProvider(incident.id));
+    final isMyIncident = ownership.when(
+      data: (value) => value,
+      error: (error, stackTrace) => false,
+      loading: () => false,
+    );
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE6EBF1)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            border: Border.all(color: const Color(0xFFE6EBF1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      _categoryIcon(incident.category),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          incident.category,
-                          style: const TextStyle(
-                            color: darkColor,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                  _categoryIcon(incident.category),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      incident.category,
+                      style: const TextStyle(
+                        color: darkColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
                       ),
-                      _StatusBadge(status: incident.status),
-                    ],
+                    ),
                   ),
+                  _StatusBadge(status: incident.status),
+                ],
+              ),
 
-                  // Show the incident photo when one was uploaded.
-                  if (incident.photoUrl != null &&
-                      incident.photoUrl!.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        incident.photoUrl!,
+              // Show the incident photo when one was uploaded.
+              if (incident.photoUrl != null &&
+                  incident.photoUrl!.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    incident.photoUrl!,
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        height: 100,
                         width: double.infinity,
-                        height: 180,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            height: 100,
-                            width: double.infinity,
-                            color: const Color(0xFFF0F3F7),
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              color: Colors.black38,
-                              size: 35,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                        color: const Color(0xFFF0F3F7),
+                        child: const Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.black38,
+                          size: 35,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
 
-                  const SizedBox(height: 14),
-                  Text(
-                    incident.description,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 13,
-                      height: 1.5,
+              const SizedBox(height: 14),
+              Text(
+                incident.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.location_on_outlined,
+                    size: 16,
+                    color: Colors.black45,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      incident.location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on_outlined,
-                        size: 16,
-                        color: Colors.black45,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          incident.location,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.black54,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        size: 14,
-                        color: Colors.black45,
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          _formatDate(incident.createdAt),
-                          style: const TextStyle(
-                            color: Colors.black54,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                      if (isMyIncident)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF3FC),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'My report',
-                            style: TextStyle(
-                              color: primaryColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      const SizedBox(width: 6),
-                      const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 13,
-                        color: Colors.black38,
-                      ),
-                    ],
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 14,
+                    color: Colors.black45,
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      _formatDate(incident.createdAt),
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  if (isMyIncident)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF3FC),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'My report',
+                        style: TextStyle(
+                          color: primaryColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 13,
+                    color: Colors.black38,
+                  ),
+                ],
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 

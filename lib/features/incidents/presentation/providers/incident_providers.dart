@@ -1,4 +1,6 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/datasources/incident_remote_datasource.dart';
@@ -7,6 +9,28 @@ import '../../domain/entities/incident.dart';
 import '../../domain/entities/incident_comment.dart';
 import '../../domain/entities/incident_reporter.dart';
 import '../../domain/repositories/incident_repository.dart';
+
+final reportedIncidentLookupProvider =
+    Provider<Future<bool> Function(String incidentId)>((ref) {
+  return (incidentId) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return false;
+
+    final document = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('reported_incidents')
+        .doc(incidentId)
+        .get();
+    return document.exists;
+  };
+});
+
+final isMyIncidentProvider = FutureProvider.family<bool, String>(
+  (ref, incidentId) {
+    return ref.watch(reportedIncidentLookupProvider)(incidentId);
+  },
+);
 
 // Firestore data source provider
 final incidentRemoteDataSourceProvider =

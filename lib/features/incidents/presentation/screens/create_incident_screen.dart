@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/utils/incident_validation.dart';
 import '../../../../shared/services/cloudinary_service.dart';
-import '../../../../shared/services/image_picker_service.dart';
+import '../../../../shared/services/service_providers.dart';
 import '../providers/incident_providers.dart';
 
 class CreateIncidentScreen extends ConsumerStatefulWidget {
@@ -28,9 +29,6 @@ class _CreateIncidentScreenState
   final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  final CloudinaryService _cloudinaryService = CloudinaryService();
-  final ImagePickerService _imagePickerService = ImagePickerService();
-
   File? _selectedImage;
   String? _selectedCategory;
   bool _isSubmitting = false;
@@ -40,36 +38,25 @@ class _CreateIncidentScreenState
   static const Color darkColor = Color(0xFF172B4D);
   static const Color backgroundColor = Color(0xFFF7F9FC);
 
-  final List<Map<String, dynamic>> _categories = [
-    {
-      'name': 'Water Shortage',
-      'icon': Icons.water_drop_outlined,
-    },
-    {
-      'name': 'Electricity Outage',
-      'icon': Icons.electrical_services_outlined,
-    },
-    {
-      'name': 'Broken Furniture',
-      'icon': Icons.chair_outlined,
-    },
-    {
-      'name': 'Damaged Facilities',
-      'icon': Icons.domain_outlined,
-    },
-    {
-      'name': 'Sanitation',
-      'icon': Icons.cleaning_services_outlined,
-    },
-    {
-      'name': 'Safety Concern',
-      'icon': Icons.health_and_safety_outlined,
-    },
-    {
-      'name': 'Other',
-      'icon': Icons.more_horiz,
-    },
-  ];
+  static const Map<String, IconData> _categoryIcons = {
+    'Water Shortage': Icons.water_drop_outlined,
+    'Electricity Outage': Icons.electrical_services_outlined,
+    'Broken Furniture': Icons.chair_outlined,
+    'Damaged Facilities': Icons.domain_outlined,
+    'Sanitation': Icons.cleaning_services_outlined,
+    'Safety Concern': Icons.health_and_safety_outlined,
+    'Other': Icons.more_horiz,
+  };
+
+  late final List<Map<String, dynamic>> _categories =
+      IncidentValidation.categories
+          .map(
+            (name) => <String, dynamic>{
+              'name': name,
+              'icon': _categoryIcons[name]!,
+            },
+          )
+          .toList();
 
   @override
   void initState() {
@@ -166,8 +153,8 @@ class _CreateIncidentScreenState
 
     try {
       final image = fromCamera
-          ? await _imagePickerService.takePhoto()
-          : await _imagePickerService.pickFromGallery();
+          ? await ref.read(imagePickerServiceProvider).takePhoto()
+          : await ref.read(imagePickerServiceProvider).pickFromGallery();
 
       if (!mounted) return;
 
@@ -200,7 +187,7 @@ class _CreateIncidentScreenState
 
       // Upload the image first, if the user selected one.
       if (_selectedImage != null) {
-        photoUrl = await _cloudinaryService.uploadImage(
+        photoUrl = await ref.read(cloudinaryServiceProvider).uploadImage(
           _selectedImage!,
           imageType: CloudinaryImageType.incident,
         );
@@ -295,12 +282,7 @@ class _CreateIncidentScreenState
                     hint: 'e.g. Main Library - Ground Floor',
                     icon: Icons.location_on_outlined,
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter the incident location';
-                    }
-                    return null;
-                  },
+                  validator: IncidentValidation.validateLocation,
                 ),
 
                 const SizedBox(height: 26),
@@ -317,17 +299,7 @@ class _CreateIncidentScreenState
                     hint: 'Explain what happened and provide useful details...',
                     icon: Icons.description_outlined,
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please describe the incident';
-                    }
-
-                    if (value.trim().length < 10) {
-                      return 'Description must be at least 10 characters';
-                    }
-
-                    return null;
-                  },
+                  validator: IncidentValidation.validateDescription,
                 ),
 
                 const SizedBox(height: 20),
