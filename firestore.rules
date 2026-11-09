@@ -1,221 +1,281 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
+
+    // Require authenticated users to have a verified ALU email.
+    function hasVerifiedAluEmail() {
+      return request.auth != null &&
+        request.auth.token.email is string &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email.matches(
+          '^[^@]+@(alustudent\\.com|alustaff\\.com)$'
+        );
     }
 
-    function userPath(userId) {
-      return /databases/$(database)/documents/users/$(userId);
+    function isSignedIn() {
+      return hasVerifiedAluEmail();
     }
 
-    function hasUserProfile() {
-      return signedIn() &&
-        exists(userPath(request.auth.uid));
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isActiveStudent() {
-      return hasUserProfile() &&
-        get(userPath(request.auth.uid)).data.role == 'student' &&
-        get(userPath(request.auth.uid)).data.accountStatus == 'active';
+    function userDocumentExists() {
+      return isSignedIn() &&
+        exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        );
     }
 
     function isApprovedStaff() {
-      return hasUserProfile() &&
-        get(userPath(request.auth.uid)).data.role == 'staff' &&
-        get(userPath(request.auth.uid)).data.accountStatus == 'active';
+      return userDocumentExists() &&
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'staff' &&
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.accountStatus == 'active';
     }
 
-    function isActiveCampusMember() {
+    function isActiveStudent() {
+      return userDocumentExists() &&
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'student' &&
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.accountStatus == 'active';
+    }
+
+    function canUseIncidents() {
       return isActiveStudent() || isApprovedStaff();
     }
 
-    function validStatus(status) {
-      return status in ['pending', 'reviewed', 'in_progress', 'resolved'];
+    function validText(value, maxLength) {
+      return value is string &&
+        value.size() > 0 &&
+        value.size() <= maxLength &&
+        value.matches('.*\\S.*');
     }
 
-    function reporterPath(incidentId) {
-      return /databases/$(database)/documents/incident_reporters/$(incidentId);
-    }
-
-    function userIncidentPath(userId, incidentId) {
-      return /databases/$(database)/documents/users/$(userId)/reported_incidents/$(incidentId);
-    }
-
-    function validIncidentCreate(incidentId) {
-      let reporter = getAfter(reporterPath(incidentId)).data;
-      let userIncident = getAfter(
-        userIncidentPath(request.auth.uid, incidentId)
-      ).data;
-      return request.resource.data.keys().hasOnly([
-          'category',
-          'location',
-          'description',
-          'status',
-          'photoUrl',
-          'createdAt',
-          'updatedAt'
-        ]) &&
-        request.resource.data.keys().hasAll([
-          'category',
-          'location',
-          'description',
-          'status',
-          'photoUrl',
-          'createdAt',
-          'updatedAt'
-        ]) &&
-        request.resource.data.category is string &&
-        request.resource.data.location is string &&
-        request.resource.data.description is string &&
-        request.resource.data.status == 'pending' &&
-        (request.resource.data.photoUrl == null ||
-          request.resource.data.photoUrl is string) &&
-        request.resource.data.createdAt == request.time &&
-        request.resource.data.updatedAt == request.time &&
-        reporter.incidentId == incidentId &&
-        reporter.reporterId == request.auth.uid &&
-        userIncident.incidentId == incidentId;
+    function validPhotoUrl(value) {
+      return value == null ||
+        (
+          value is string &&
+          value.size() <= 2048 &&
+          value.matches(
+            '^https://res\\.cloudinary\\.com/vbzq5ssu/image/upload/.+$'
+          )
+        );
     }
 
     match /users/{userId} {
-      allow get: if signedIn() && request.auth.uid == userId;
-      allow list: if false;
+      allow read: if isOwner(userId) || isApprovedStaff();
 
-      allow create: if signedIn() &&
-        request.auth.uid == userId &&
+      allow create: if isOwner(userId) &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.keys().hasAll([
+          'email',
+          'role',
+          'accountStatus'
+        ]) &&
         request.resource.data.keys().hasOnly([
           'name',
+          'displayName',
           'email',
-          'photoUrl',
           'role',
           'accountStatus',
-          'createdAt'
-        ]) &&
-        request.resource.data.keys().hasAll([
-          'name',
-          'email',
           'photoUrl',
-          'role',
-          'accountStatus',
           'createdAt'
         ]) &&
-        request.resource.data.name is string &&
-        request.resource.data.email is string &&
-        (request.resource.data.photoUrl == null ||
-          request.resource.data.photoUrl is string) &&
         (
-          (request.resource.data.role == 'student' &&
-            request.resource.data.accountStatus == 'active') ||
-          (request.resource.data.role == 'pending_staff' &&
-            request.resource.data.accountStatus == 'pending')
+          !request.resource.data.keys().hasAny(['photoUrl']) ||
+          validPhotoUrl(request.resource.data.photoUrl)
         ) &&
-        request.resource.data.createdAt == request.time;
+        (
+          (
+            request.resource.data.role == 'student' &&
+            request.resource.data.accountStatus == 'active'
+          ) ||
+          (
+            request.resource.data.role == 'pending_staff' &&
+            request.resource.data.accountStatus == 'pending'
+          )
+        );
 
-      allow update: if signedIn() &&
-        request.auth.uid == userId &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['name', 'photoUrl']) &&
-        request.resource.data.name is string &&
-        (request.resource.data.photoUrl == null ||
-          request.resource.data.photoUrl is string);
+      allow update: if isOwner(userId) &&
+        request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['name', 'displayName', 'photoUrl']) &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.accountStatus == resource.data.accountStatus &&
+        request.resource.data.email == resource.data.email &&
+        (
+          !request.resource.data.keys().hasAny(['photoUrl']) ||
+          validPhotoUrl(request.resource.data.photoUrl)
+        );
+
+      allow update: if isApprovedStaff() &&
+        resource.data.role == 'pending_staff' &&
+        resource.data.accountStatus == 'pending' &&
+        request.resource.data.role == 'staff' &&
+        request.resource.data.accountStatus == 'active' &&
+        request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['role', 'accountStatus']);
+
       allow delete: if false;
 
       match /reported_incidents/{incidentId} {
-        allow get, list: if signedIn() && request.auth.uid == userId;
-        allow create: if isActiveStudent() &&
-          request.auth.uid == userId &&
-          request.resource.data.keys().hasOnly(['incidentId', 'createdAt']) &&
-          request.resource.data.keys().hasAll(['incidentId', 'createdAt']) &&
+        allow read: if isOwner(userId) && isActiveStudent();
+
+        allow create: if isOwner(userId) &&
+          isActiveStudent() &&
+          request.resource.data.keys().hasAll([
+            'incidentId',
+            'createdAt'
+          ]) &&
+          request.resource.data.keys().hasOnly([
+            'incidentId',
+            'createdAt'
+          ]) &&
           request.resource.data.incidentId == incidentId &&
           request.resource.data.createdAt == request.time &&
-          getAfter(
+          existsAfter(
             /databases/$(database)/documents/incidents/$(incidentId)
-          ).data.status == 'pending' &&
-          getAfter(reporterPath(incidentId)).data.reporterId == userId;
+          );
+
         allow update, delete: if false;
       }
     }
 
     match /incidents/{incidentId} {
-      allow get, list: if isActiveCampusMember();
+      allow read: if canUseIncidents();
+
       allow create: if isActiveStudent() &&
-        validIncidentCreate(incidentId);
+        request.resource.data.keys().hasAll([
+          'category',
+          'location',
+          'description',
+          'status',
+          'photoUrl',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'category',
+          'location',
+          'description',
+          'status',
+          'photoUrl',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        validText(request.resource.data.category, 100) &&
+        validText(request.resource.data.location, 200) &&
+        validText(request.resource.data.description, 2000) &&
+        request.resource.data.status == 'pending' &&
+        validPhotoUrl(request.resource.data.photoUrl) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        existsAfter(
+          /databases/$(database)/documents/incident_reporters/$(incidentId)
+        ) &&
+        getAfter(
+          /databases/$(database)/documents/incident_reporters/$(incidentId)
+        ).data.reporterId == request.auth.uid &&
+        getAfter(
+          /databases/$(database)/documents/incident_reporters/$(incidentId)
+        ).data.incidentId == incidentId &&
+        existsAfter(
+          /databases/$(database)/documents/users/$(request.auth.uid)/reported_incidents/$(incidentId)
+        );
+
       allow update: if isApprovedStaff() &&
-        request.resource.data.diff(resource.data).affectedKeys()
+        request.resource.data.diff(resource.data)
+          .affectedKeys()
           .hasOnly(['status', 'updatedAt']) &&
-        validStatus(request.resource.data.status) &&
+        request.resource.data.status in [
+          'pending',
+          'reviewed',
+          'in_progress',
+          'resolved'
+        ] &&
         request.resource.data.updatedAt == request.time;
+
       allow delete: if false;
 
       match /comments/{commentId} {
-        allow get, list: if isActiveCampusMember();
-        allow create: if isActiveCampusMember() &&
-          request.resource.data.keys().hasOnly([
-            'incidentId',
-            'message',
-            'createdAt'
-          ]) &&
+        allow read: if canUseIncidents();
+
+        allow create: if canUseIncidents() &&
           request.resource.data.keys().hasAll([
             'incidentId',
             'message',
             'createdAt'
           ]) &&
+          request.resource.data.keys().hasOnly([
+            'incidentId',
+            'message',
+            'createdAt'
+          ]) &&
           request.resource.data.incidentId == incidentId &&
-          request.resource.data.message is string &&
-          request.resource.data.message.size() > 0 &&
+          validText(request.resource.data.message, 2000) &&
           request.resource.data.createdAt == request.time &&
+          existsAfter(
+            /databases/$(database)/documents/incident_comment_authors/$(commentId)
+          ) &&
+          getAfter(
+            /databases/$(database)/documents/incident_comment_authors/$(commentId)
+          ).data.authorId == request.auth.uid &&
           getAfter(
             /databases/$(database)/documents/incident_comment_authors/$(commentId)
           ).data.incidentId == incidentId &&
           getAfter(
             /databases/$(database)/documents/incident_comment_authors/$(commentId)
-          ).data.authorId == request.auth.uid;
+          ).data.commentId == commentId;
+
         allow update, delete: if false;
       }
     }
 
     match /incident_reporters/{incidentId} {
-      allow get, list: if isApprovedStaff();
+      allow read: if isApprovedStaff();
+
       allow create: if isActiveStudent() &&
-        request.resource.data.keys().hasOnly([
-          'incidentId',
-          'reporterId',
-          'reporterName',
-          'reporterEmail',
-          'reporterPhotoUrl',
-          'createdAt'
-        ]) &&
         request.resource.data.keys().hasAll([
           'incidentId',
           'reporterId',
           'reporterName',
           'reporterEmail',
-          'reporterPhotoUrl',
+          'createdAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'incidentId',
+          'reporterId',
+          'reporterName',
+          'reporterEmail',
           'createdAt'
         ]) &&
         request.resource.data.incidentId == incidentId &&
         request.resource.data.reporterId == request.auth.uid &&
-        request.resource.data.reporterName ==
-          get(userPath(request.auth.uid)).data.name &&
-        request.resource.data.reporterEmail ==
-          get(userPath(request.auth.uid)).data.email &&
-        request.resource.data.reporterPhotoUrl ==
-          get(userPath(request.auth.uid)).data.photoUrl &&
         request.resource.data.createdAt == request.time &&
+        existsAfter(
+          /databases/$(database)/documents/incidents/$(incidentId)
+        ) &&
         getAfter(
           /databases/$(database)/documents/incidents/$(incidentId)
-        ).data.status == 'pending' &&
-        getAfter(
-          userIncidentPath(request.auth.uid, incidentId)
-        ).data.incidentId == incidentId;
+        ).data.status == 'pending';
+
       allow update, delete: if false;
     }
 
     match /incident_comment_authors/{commentId} {
-      allow get, list: if isApprovedStaff();
-      allow create: if isActiveCampusMember() &&
-        request.resource.data.keys().hasOnly([
+      allow read: if isApprovedStaff();
+
+      allow create: if canUseIncidents() &&
+        request.resource.data.keys().hasAll([
           'commentId',
           'incidentId',
           'authorId',
@@ -223,7 +283,7 @@ service cloud.firestore {
           'authorEmail',
           'createdAt'
         ]) &&
-        request.resource.data.keys().hasAll([
+        request.resource.data.keys().hasOnly([
           'commentId',
           'incidentId',
           'authorId',
@@ -233,14 +293,14 @@ service cloud.firestore {
         ]) &&
         request.resource.data.commentId == commentId &&
         request.resource.data.authorId == request.auth.uid &&
-        request.resource.data.authorName ==
-          get(userPath(request.auth.uid)).data.name &&
-        request.resource.data.authorEmail ==
-          get(userPath(request.auth.uid)).data.email &&
         request.resource.data.createdAt == request.time &&
+        existsAfter(
+          /databases/$(database)/documents/incidents/$(request.resource.data.incidentId)/comments/$(commentId)
+        ) &&
         getAfter(
           /databases/$(database)/documents/incidents/$(request.resource.data.incidentId)/comments/$(commentId)
         ).data.incidentId == request.resource.data.incidentId;
+
       allow update, delete: if false;
     }
 
