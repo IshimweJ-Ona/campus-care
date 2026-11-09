@@ -1,4 +1,6 @@
 
+import 'development_test_account.dart';
+
 class Validators {
   Validators._();
 
@@ -67,6 +69,15 @@ class Validators {
 
   // Email
   static String? validateEmail(String? value) {
+    return validateAluEmail(value);
+  }
+
+  static String? validateLoginEmail(String? value) {
+    if (validateAluEmail(value) == null ||
+        isDevelopmentStaffTestEmail(value)) {
+      return null;
+    }
+
     return validateAluEmail(value);
   }
 
