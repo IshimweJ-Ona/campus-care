@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,12 +20,171 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late Future<AppUser?> _userFuture;
+  Set<String>? _knownIncidentIds;
+  final List<Incident> _notifications = [];
+  final Set<String> _unreadIncidentIds = {};
 
   @override
   void initState() {
     super.initState();
 
     _userFuture = ref.read(authControllerProvider.notifier).getCurrentUser();
+    unawaited(_startIncidentNotifications());
+  }
+
+  Future<void> _startIncidentNotifications() async {
+    late final AppUser? user;
+    try {
+      user = await _userFuture;
+    } on Exception catch (error) {
+      if (mounted) {
+        _showMessage('Could not start report notifications: $error');
+      }
+      return;
+    }
+
+    final currentUser = user;
+    if (!mounted || currentUser == null || !currentUser.canAccessIncidents) {
+      return;
+    }
+
+    ref.listenManual<AsyncValue<List<Incident>>>(incidentsStreamProvider, (
+      previous,
+      next,
+    ) {
+      next.whenData(
+        (incidents) => _handleIncidentUpdate(incidents, currentUser),
+      );
+    });
+  }
+
+  void _handleIncidentUpdate(List<Incident> incidents, AppUser user) {
+    final knownIncidentIds = _knownIncidentIds;
+    if (knownIncidentIds == null) {
+      _knownIncidentIds = incidents.map((incident) => incident.id).toSet();
+      return;
+    }
+
+    final newIncidents = incidents
+        .where((incident) => knownIncidentIds.add(incident.id))
+        .toList();
+    for (final incident in newIncidents) {
+      _addNotificationIfNotMine(incident, user);
+    }
+  }
+
+  Future<void> _addNotificationIfNotMine(
+    Incident incident,
+    AppUser user,
+  ) async {
+    try {
+      final isMyIncident = user.canUseStaffFeatures
+          ? false
+          : await ref.read(reportedIncidentLookupProvider)(incident.id);
+      if (!mounted || isMyIncident) return;
+
+      setState(() {
+        _notifications.insert(0, incident);
+        _unreadIncidentIds.add(incident.id);
+      });
+    } on FirebaseException catch (error) {
+      if (mounted) {
+        _showMessage(
+          'Could not check report notifications: '
+          '${error.message ?? error.code}',
+        );
+      }
+    }
+  }
+
+  void _showNotifications() {
+    setState(_unreadIncidentIds.clear);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final notifications = List<Incident>.of(_notifications);
+        final maxHeight = MediaQuery.sizeOf(sheetContext).height * 0.7;
+
+        return SafeArea(
+          child: SizedBox(
+            height: maxHeight,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Notifications',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close notifications',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                if (notifications.isEmpty)
+                  const Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'No new campus reports yet.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: notifications.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final incident = notifications[index];
+                        return ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: AppColors.primary,
+                            child: Icon(
+                              Icons.campaign_outlined,
+                              color: Colors.white,
+                            ),
+                          ),
+                          title: Text(incident.category),
+                          subtitle: Text(
+                            '${incident.location}\n${incident.description}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          isThreeLine: true,
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            context.push('/incidents/${incident.id}');
+                          },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showMessage(String message) {
@@ -179,12 +341,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         IconButton(
-          onPressed: () =>
-              _showMessage('Notifications will be available soon.'),
-          icon: const Icon(
-            Icons.notifications_none_rounded,
-            color: AppColors.textPrimary,
-            size: 27,
+          tooltip: 'Notifications',
+          onPressed: _showNotifications,
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(
+                Icons.notifications_none_rounded,
+                color: AppColors.textPrimary,
+                size: 27,
+              ),
+              if (_unreadIncidentIds.isNotEmpty)
+                Positioned(
+                  top: -5,
+                  right: -7,
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 17,
+                      minHeight: 17,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _unreadIncidentIds.length > 9
+                          ? '9+'
+                          : '${_unreadIncidentIds.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         InkWell(

@@ -73,8 +73,15 @@ class Validators {
   }
 
   static String? validateLoginEmail(String? value) {
+    final normalizedEmail = value == null ? null : normalizeEmail(value);
+    if (normalizedEmail == developmentStaffTestEmail &&
+        !isDevelopmentStaffTestEnabled) {
+      return 'Staff Test sign-in requires Firebase emulators. Start them and '
+          'run the app with --dart-define=USE_FIREBASE_EMULATORS=true.';
+    }
+
     if (validateAluEmail(value) == null ||
-        isDevelopmentStaffTestEmail(value)) {
+        isDevelopmentStaffTestEmail(normalizedEmail)) {
       return null;
     }
 

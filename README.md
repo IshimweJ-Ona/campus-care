@@ -36,12 +36,16 @@ been addressed.
   image.
 - Browse and filter reports, view details, comment, and track status changes.
 - See whether a report belongs to them without reading private reporter data.
+- Receive in-app alerts for other users' new reports while using the app; their
+  own reports are excluded. Alerts are not push notifications and are not
+  persisted between app sessions.
 - Cannot see private reporter identities or update incident statuses.
 
 ### Approved staff
 
 - Sign in with an approved `@alustaff.com` account.
 - See incident statistics and browse all campus reports.
+- Receive in-app alerts for newly submitted reports while using the app.
 - View private reporter information and commenter names.
 - Update report status to one of the supported statuses.
 
@@ -716,18 +720,24 @@ Set-Location 'C:\path\to\campus_care_app'
 ```
 
 Replace the example path with the folder where you cloned the repository.
-Choose and remember the password when prompted. To demonstrate the staff
-workflow, run the debug app against emulators:
+Choose and remember the password when prompted. This password is stored only
+by the local Auth Emulator; the script does not save it. The account is
+`staff.test@campuscare.dev`, and it is created only in the local emulators.
+
+In a third PowerShell window, start the debug app against the running
+emulators:
 
 ```powershell
 flutter devices
 flutter run --dart-define=USE_FIREBASE_EMULATORS=true
 ```
 
-With one connected device, Flutter can select it automatically. If you connect
-more than one, add `-d YOUR_DEVICE_ID` using an ID printed by `flutter
-devices`. For a physical Android device, use the computer's LAN IP as the
-emulator host:
+If Flutter lists one connected emulator/device, it can select it automatically.
+If there is more than one, add `-d YOUR_DEVICE_ID` using an ID printed by
+`flutter devices`. For the Android emulator, the app reaches the computer's
+local Firebase emulators through `10.0.2.2` by default. For a physical Android
+device, both the device and computer must be on the same network; use the
+computer's reachable LAN IP as the emulator host:
 
 ```powershell
 flutter run --dart-define=USE_FIREBASE_EMULATORS=true `
@@ -735,13 +745,18 @@ flutter run --dart-define=USE_FIREBASE_EMULATORS=true `
 ```
 
 Replace the example address with the development computer's reachable LAN IP.
-The Android emulator default is `10.0.2.2`; iOS Simulator defaults to
-`127.0.0.1`.
+For iOS Simulator, the default emulator host is `127.0.0.1`.
 
-Log in with `staff.test@campuscare.dev` and the password entered in the
-initializer. The staff home screen shows incident statistics. Open **View
-Campus Reports**, choose a report to view reporter information, and update its
-status.
+When the app opens, sign in with email/password:
+
+- **Email:** `staff.test@campuscare.dev`
+- **Password:** the password entered in `Initialize-StaffTest.ps1`
+
+The staff home screen shows live incident statistics. Open **View Campus
+Reports** to browse the reports, select one to see its reporter information,
+and use the status controls to update it. Keep the emulator terminal running
+while using the account. The same account and password do not work against
+production Firebase and must not be used as real staff credentials.
 
 Run the integration test with one Android emulator/device connected. The test
 creates unique student and pending-staff accounts, exercises verification,

@@ -32,6 +32,25 @@ void main() {
     );
   });
 
+  testWidgets('explains how to enable the local Staff Test account', (
+    tester,
+  ) async {
+    await pumpConsumerScreen(tester, const LoginScreen());
+
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'staff.test@campuscare.dev',
+    );
+    await tester.ensureVisible(find.text('Login'));
+    await tester.tap(find.text('Login'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Staff Test sign-in requires Firebase emulators.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('toggles password visibility', (tester) async {
     await pumpConsumerScreen(tester, const LoginScreen());
 

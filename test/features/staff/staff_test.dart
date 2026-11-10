@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:campus_care_app/features/auth/domain/entities/app_user.dart';
 import 'package:campus_care_app/features/home/presentation/screens/home_screen.dart';
 import 'package:campus_care_app/features/incidents/domain/entities/incident.dart';
@@ -80,6 +82,97 @@ void main() {
     expect(find.text('Report an Incident'), findsOneWidget);
     expect(find.text('Incident Statistics'), findsNothing);
     expect(find.text('View Campus Reports'), findsNothing);
+  });
+
+  testWidgets('students get notifications for other users reports only', (
+    tester,
+  ) async {
+    final controller = StreamController<List<Incident>>();
+    controller.add([]);
+    addTearDown(controller.close);
+    final incidentRepository = FakeIncidentRepository()
+      ..incidentsStream = controller.stream;
+    final auth = FakeAuthRepository(
+      user: const AppUser(
+        id: 'student-1',
+        email: 'student@alustudent.com',
+        displayName: 'Campus Student',
+        emailVerified: true,
+      ),
+    );
+
+    await pumpConsumerScreen(
+      tester,
+      const HomeScreen(),
+      auth: auth,
+      incidents: incidentRepository,
+      incidentOwnershipLookup: (incidentId) async => incidentId == 'my-report',
+    );
+
+    controller.add([
+      Incident(
+        id: 'my-report',
+        category: 'My report',
+        location: 'North Hall',
+        description: 'Submitted by this student.',
+        status: 'pending',
+        createdAt: DateTime.utc(2025, 1, 3),
+      ),
+      Incident(
+        id: 'other-report',
+        category: 'Other report',
+        location: 'South Hall',
+        description: 'Submitted by someone else.',
+        status: 'pending',
+        createdAt: DateTime.utc(2025, 1, 4),
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Notifications'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Other report'), findsOneWidget);
+    expect(find.text('My report'), findsNothing);
+  });
+
+  testWidgets('staff get notifications for newly reported incidents', (
+    tester,
+  ) async {
+    final controller = StreamController<List<Incident>>();
+    controller.add([]);
+    addTearDown(controller.close);
+    final incidentRepository = FakeIncidentRepository()
+      ..incidentsStream = controller.stream;
+    final auth = FakeAuthRepository(
+      user: const AppUser(
+        id: 'staff-1',
+        email: 'staff@alustaff.com',
+        displayName: 'Campus Staff',
+        role: 'staff',
+        accountStatus: 'active',
+        emailVerified: true,
+      ),
+    );
+
+    await pumpConsumerScreen(
+      tester,
+      const HomeScreen(),
+      auth: auth,
+      incidents: incidentRepository,
+      incidentOwnershipLookup: (incidentId) async {
+        throw StateError('Staff should not check student report ownership.');
+      },
+    );
+
+    controller.add([reports.first]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Notifications'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Water Shortage'), findsOneWidget);
   });
 
   testWidgets('pending staff do not see approved staff features', (

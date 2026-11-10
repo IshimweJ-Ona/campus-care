@@ -56,6 +56,12 @@ void main() {
         Validators.validateLoginEmail('staff.test@campuscare.dev'),
         isDevelopmentStaffTestEnabled ? isNull : isNotNull,
       );
+      if (!isDevelopmentStaffTestEnabled) {
+        expect(
+          Validators.validateLoginEmail('staff.test@campuscare.dev'),
+          contains('Firebase emulators'),
+        );
+      }
       expect(
         Validators.validateLoginEmail('another@campuscare.dev'),
         isNotNull,

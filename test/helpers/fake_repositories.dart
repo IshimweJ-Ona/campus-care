@@ -85,6 +85,7 @@ class FakeAuthRepository implements AuthRepository {
 
 class FakeIncidentRepository implements IncidentRepository {
   List<Incident> incidents = [];
+  Stream<List<Incident>>? incidentsStream;
   Incident? incident;
   IncidentReporter? reporter;
   List<IncidentComment> comments = [];
@@ -117,7 +118,8 @@ class FakeIncidentRepository implements IncidentRepository {
   Future<List<Incident>> getAllIncidents() async => incidents;
 
   @override
-  Stream<List<Incident>> watchIncidents() => Stream.value(incidents);
+  Stream<List<Incident>> watchIncidents() =>
+      incidentsStream ?? Stream.value(incidents);
 
   @override
   Future<Incident?> getIncidentById(String incidentId) async => incident;
