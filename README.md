@@ -417,12 +417,19 @@ terminal:
 firebase emulators:start --project campuscare-61579 --only auth,firestore
 ```
 
-The Staff Test initializer is a PowerShell script. If PowerShell 7 is installed
+The Staff Test initializer is a PowerShell script. On macOS, if PowerShell 7 is installed
 ([installation instructions](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-macos)),
 run it from another terminal at the project root:
 
 ```bash
 pwsh ./scripts/Initialize-StaffTest.ps1
+```
+
+On Windows, run it from PowerShell at the project root; PowerShell 7 (`pwsh`)
+is not required:
+
+```powershell
+.\scripts\Initialize-StaffTest.ps1
 ```
 
 Then set the password entered by the initializer for the integration test and

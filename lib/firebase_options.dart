@@ -56,7 +56,6 @@ class DefaultFirebaseOptions {
     projectId: 'campuscare-61579',
     storageBucket: 'campuscare-61579.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCnjIGK312fbs9yHwLSgDS3DrMFYoNj8Rs',
     appId: '1:922942266707:ios:fd3f48603ac0220c4955a6',

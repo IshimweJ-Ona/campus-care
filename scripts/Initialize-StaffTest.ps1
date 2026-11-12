@@ -94,7 +94,16 @@ $emulatorRules = $normalizedRules.Replace(
     $normalizedEmulatorGate
 )
 
-$rulesPayload = @{ rules = $emulatorRules } | ConvertTo-Json -Compress
+$rulesPayload = @{
+    rules = @{
+        files = @(
+            @{
+                name = 'firestore.rules'
+                content = $emulatorRules
+            }
+        )
+    }
+} | ConvertTo-Json -Depth 5 -Compress
 try {
     Invoke-RestMethod -Method Put `
         -Uri "$firestoreBase/emulator/v1/projects/${projectId}:securityRules" `
@@ -102,7 +111,11 @@ try {
         -Body $rulesPayload | Out-Null
 }
 catch {
-    throw "Could not load the development-only rules into the Firestore emulator. Start Auth and Firestore emulators first. $($_.Exception.Message)"
+    $errorDetails = $_.ErrorDetails.Message
+    if (-not $errorDetails) {
+        $errorDetails = $_.Exception.Message
+    }
+    throw "Could not load the development-only rules into the Firestore emulator. Start Auth and Firestore emulators first. $errorDetails"
 }
 
 $profileUri = "$firestoreBase/v1/projects/$projectId/databases/(default)/documents/users/$($auth.localId)?updateMask.fieldPaths=name&updateMask.fieldPaths=email&updateMask.fieldPaths=role&updateMask.fieldPaths=accountStatus&updateMask.fieldPaths=createdAt"
