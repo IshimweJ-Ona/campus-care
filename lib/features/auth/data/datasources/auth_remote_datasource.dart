@@ -73,6 +73,9 @@ class AuthRemoteDataSource {
   }) async {
     final isDevelopmentTestAccount =
         isDevelopmentStaffTestEmail(authenticatedEmail);
+    final isProductionDemoStaff =
+        Validators.normalizeEmail(authenticatedEmail) ==
+            productionDemoStaffEmail;
     final roleForEmail =
         Validators.roleForAluEmail(authenticatedEmail) ??
         (isDevelopmentTestAccount ? 'staff' : null);
@@ -112,8 +115,14 @@ class AuthRemoteDataSource {
         'name': user.displayName ?? '',
         'email': authenticatedEmail,
         'photoUrl': user.photoURL,
-        'role': isStudent ? 'student' : 'pending_staff',
-        'accountStatus': isStudent ? 'active' : 'pending',
+        'role': isStudent
+            ? 'student'
+            : isProductionDemoStaff
+                ? 'staff'
+                : 'pending_staff',
+        'accountStatus': isStudent || isProductionDemoStaff
+            ? 'active'
+            : 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       };
 

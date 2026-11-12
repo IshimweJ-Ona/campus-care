@@ -16,6 +16,7 @@ class Validators {
     if (value == null) return null;
 
     final email = normalizeEmail(value);
+    if (email == productionDemoStaffEmail) return 'staff';
     if (!_emailPattern.hasMatch(email) || email.length > 254) {
       return null;
     }
@@ -29,6 +30,7 @@ class Validators {
     }
 
     final email = normalizeEmail(value);
+    if (email == productionDemoStaffEmail) return null;
     if (email.length > 254) {
       return 'Email address is too long.';
     }

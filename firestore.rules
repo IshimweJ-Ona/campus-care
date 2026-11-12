@@ -3,13 +3,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Require authenticated users to have a verified ALU email.
+    // Require verified ALU email, with one temporary production demo account.
+    function isProductionDemoStaff() {
+      return request.auth != null &&
+        request.auth.token.email == 'livishjonathan@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
     function hasVerifiedAluEmail() {
       return request.auth != null &&
         request.auth.token.email is string &&
         request.auth.token.email_verified == true &&
-        request.auth.token.email.matches(
-          '^[^@]+@(alustudent\\.com|alustaff\\.com)$'
+        (
+          request.auth.token.email.matches(
+            '^[^@]+@(alustudent\\.com|alustaff\\.com)$'
+          ) || isProductionDemoStaff()
         );
     }
 
@@ -36,6 +44,12 @@ service cloud.firestore {
         get(
           /databases/$(database)/documents/users/$(request.auth.uid)
         ).data.accountStatus == 'active';
+    }
+
+    // Demo staff can manage incidents but cannot authorize more staff users.
+    function isInstitutionalStaff() {
+      return isApprovedStaff() &&
+        request.auth.token.email.matches('^[^@]+@alustaff\\.com$');
     }
 
     function isActiveStudent() {
@@ -101,6 +115,12 @@ service cloud.firestore {
           (
             request.resource.data.role == 'pending_staff' &&
             request.resource.data.accountStatus == 'pending'
+          ) ||
+          (
+            isProductionDemoStaff() &&
+            request.resource.data.email == request.auth.token.email &&
+            request.resource.data.role == 'staff' &&
+            request.resource.data.accountStatus == 'active'
           )
         );
 
@@ -116,7 +136,7 @@ service cloud.firestore {
           validPhotoUrl(request.resource.data.photoUrl)
         );
 
-      allow update: if isApprovedStaff() &&
+      allow update: if isInstitutionalStaff() &&
         resource.data.role == 'pending_staff' &&
         resource.data.accountStatus == 'pending' &&
         request.resource.data.role == 'staff' &&
