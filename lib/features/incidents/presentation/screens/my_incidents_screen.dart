@@ -67,72 +67,105 @@ class _MyIncidentsScreenState extends ConsumerState<_MyIncidentsBody> {
             foregroundColor: darkColor,
             elevation: 0,
           ),
-          body: Column(
-            children: [
-              _buildHeader(context),
-              if (isApprovedStaff) _buildStatusFilter(),
-              Expanded(
-                child: incidentsAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error, stack) => _buildError(error.toString()),
-                  data: (incidents) {
-                    var filteredIncidents = widget.category == null
-                        ? incidents
-                        : incidents
-                              .where(
-                                (incident) =>
-                                    incident.category == widget.category,
-                              )
-                              .toList();
-
-                    if (isApprovedStaff && _statusFilter != 'all') {
-                      filteredIncidents = filteredIncidents
-                          .where((incident) => incident.status == _statusFilter)
-                          .toList();
-                    }
-
-                    if (filteredIncidents.isEmpty) {
-                      return _buildEmptyState();
-                    }
-
-                    return RefreshIndicator(
-                      onRefresh: () async {
-                        ref.invalidate(incidentsStreamProvider);
-                      },
-                      child: ListView.separated(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(18),
-                        itemCount: filteredIncidents.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final incident = filteredIncidents[index];
-
-                          return IncidentCard(
-                            incident: incident,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => IncidentDetailsScreen(
-                                    incidentId: incident.id,
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    );
-                  },
+          body: RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(incidentsStreamProvider);
+            },
+            child: incidentsAsync.when(
+              loading: () => _buildScrollablePage(
+                context,
+                isApprovedStaff: isApprovedStaff,
+                content: const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
                 ),
               ),
-            ],
+              error: (error, stack) => _buildScrollablePage(
+                context,
+                isApprovedStaff: isApprovedStaff,
+                content: SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: _buildError(error.toString())),
+                ),
+              ),
+              data: (incidents) {
+                var filteredIncidents = widget.category == null
+                    ? incidents
+                    : incidents
+                          .where(
+                            (incident) =>
+                                incident.category == widget.category,
+                          )
+                          .toList();
+
+                if (isApprovedStaff && _statusFilter != 'all') {
+                  filteredIncidents = filteredIncidents
+                      .where((incident) => incident.status == _statusFilter)
+                      .toList();
+                }
+
+                final content = filteredIncidents.isEmpty
+                    ? SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmptyState(),
+                      )
+                    : SliverPadding(
+                        padding: const EdgeInsets.all(18),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              if (index.isOdd) {
+                                return const SizedBox(height: 14);
+                              }
+
+                              final incident =
+                                  filteredIncidents[index ~/ 2];
+                              return IncidentCard(
+                                incident: incident,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => IncidentDetailsScreen(
+                                        incidentId: incident.id,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                            childCount: filteredIncidents.length * 2 - 1,
+                          ),
+                        ),
+                      );
+
+                return _buildScrollablePage(
+                  context,
+                  isApprovedStaff: isApprovedStaff,
+                  content: content,
+                );
+              },
+            ),
           ),
         );
       },
     );
   }
 
+  Widget _buildScrollablePage(
+    BuildContext context, {
+    required bool isApprovedStaff,
+    required Widget content,
+  }) {
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(child: _buildHeader(context)),
+        if (isApprovedStaff)
+          SliverToBoxAdapter(child: _buildStatusFilter()),
+        content,
+      ],
+    );
+  }
   Widget _buildStatusFilter() {
     const filters = <String, String>{
       'all': 'All',
@@ -215,38 +248,38 @@ class _MyIncidentsScreenState extends ConsumerState<_MyIncidentsBody> {
   }
 
   Widget _buildEmptyState() {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 100),
-        const Icon(Icons.inbox_outlined, size: 65, color: Colors.black26),
-        const SizedBox(height: 16),
-        Center(
-          child: Text(
-            widget.category == null
-                ? 'No incidents reported yet'
-                : 'No ${widget.category} reports yet',
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: darkColor,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.inbox_outlined, size: 65, color: Colors.black26),
+            const SizedBox(height: 16),
+            Text(
+              widget.category == null
+                  ? 'No incidents reported yet'
+                  : 'No ${widget.category} reports yet',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: darkColor,
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              widget.category == null
+                  ? 'New campus reports will appear here.'
+                  : 'Reports in this category will appear here.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Center(
-          child: Text(
-            widget.category == null
-                ? 'New campus reports will appear here.'
-                : 'Reports in this category will appear here.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.black54),
-          ),
-        ),
-      ],
+      ),
     );
   }
-
   Widget _buildError(String error) {
     return Center(
       child: Padding(
